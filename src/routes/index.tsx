@@ -42,7 +42,16 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
-import { type Lead, seedLeads, seedLogs, seedStats } from "@/lib/bounty-mock";
+import {
+  type Lead,
+  MOCK_WEBHOOK_URL,
+  developerProfile,
+  portfolioRepos,
+  seedLeads,
+  seedLogs,
+  seedStats,
+} from "@/lib/bounty-mock";
+import { Copy, Check } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
