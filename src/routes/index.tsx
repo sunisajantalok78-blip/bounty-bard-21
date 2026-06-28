@@ -42,7 +42,16 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
-import { type Lead, seedLeads, seedLogs, seedStats } from "@/lib/bounty-mock";
+import {
+  type Lead,
+  MOCK_WEBHOOK_URL,
+  developerProfile,
+  portfolioRepos,
+  seedLeads,
+  seedLogs,
+  seedStats,
+} from "@/lib/bounty-mock";
+import { Copy, Check } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -375,6 +384,8 @@ function MonitorTab({
           </div>
         </ScrollArea>
       </div>
+
+      <WebhookField />
     </div>
   );
 }
@@ -434,23 +445,17 @@ function MetricCard({
 /* ---------------- Portfolio Tab ---------------- */
 
 function PortfolioTab() {
-  const [name, setName] = useState("Alex Carter");
-  const [linkedin, setLinkedin] = useState("https://linkedin.com/in/alexcarter");
-  const [facebook, setFacebook] = useState("https://facebook.com/alexbuilds");
+  const [name, setName] = useState(developerProfile.name);
+  const [role, setRole] = useState(developerProfile.role);
+  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
+  const [facebook, setFacebook] = useState(developerProfile.facebook);
   const [stack, setStack] = useState(
-    `Active repos:
-1. realtime-sync       — WebSocket/socket.io reconnection toolkit (TS, Node 20)
-2. tenant-billing-kit  — Stripe Connect + usage metering on Supabase
-3. next-migrate-toolkit— Next.js 13 → App Router migration helpers
-4. hydrogen-perf-audit — Shopify Hydrogen perf audit + RSC streaming
-5. resume-parse-edge   — LLM resume parser running on edge functions
-6. ai-rag-starter      — pgvector + Postgres RAG kit (Drizzle, Hono)
-7. workflow-canvas     — drag-drop visual workflow builder (React Flow)
-8. invoice-pdf-gen     — Puppeteer-less PDF invoicing (React + Resvg)
-9. crm-light           — multi-tenant CRM with row-level security`,
+    portfolioRepos
+      .map((r, i) => `${i + 1}. ${r.name} — ${r.tagline}\n   stack: ${r.stack}`)
+      .join("\n"),
   );
   const [prompt, setPrompt] = useState(
-    `You are an autonomous pitcher writing on behalf of {{name}}, a senior full-stack engineer.
+    `You are an autonomous pitcher writing on behalf of {{name}} ({{role}}).
 
 Voice:
 - Direct, polite, confident. No fluff. No emojis.
@@ -482,6 +487,9 @@ Never invent credentials. Never overpromise. Never copy boilerplate.`,
         <div className="grid gap-4">
           <Field label="Full name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Role / headline">
+            <Input value={role} onChange={(e) => setRole(e.target.value)} />
           </Field>
           <Field label="LinkedIn URL">
             <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} />
@@ -844,6 +852,79 @@ function PayoutsTab({ stats }: { stats: typeof seedStats }) {
           </ul>
         </div>
       </div>
+
+      <WebhookField />
     </div>
   );
 }
+
+/* ---------------- Webhook Field ---------------- */
+
+function WebhookField() {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(MOCK_WEBHOOK_URL);
+      setCopied(true);
+      toast.success("Webhook URL copied", {
+        description: "Paste it into your n8n / Make.com HTTP node.",
+      });
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Copy failed — select & copy manually.");
+    }
+  };
+
+  return (
+    <div className="glass-panel rounded-2xl p-5">
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-neon/10 text-neon">
+            <Webhook className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold">Incoming lead webhook</h3>
+            <p className="text-xs text-muted-foreground">
+              Point your n8n / Make.com scenarios at this endpoint to push leads into the engine.
+            </p>
+          </div>
+        </div>
+        <Badge variant="outline" className="border-neon/30 bg-neon/10 text-[10px] text-neon">
+          POST · JSON · live
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2 rounded-xl border border-neon/30 bg-surface/60 p-1.5 pl-3">
+        <span className="font-mono text-[11px] font-bold text-neon">POST</span>
+        <Input
+          readOnly
+          value={MOCK_WEBHOOK_URL}
+          onFocus={(e) => e.currentTarget.select()}
+          className="h-9 border-0 bg-transparent font-mono text-sm text-foreground/90 focus-visible:ring-0"
+        />
+        <Button
+          size="sm"
+          onClick={handleCopy}
+          className="h-9 shrink-0 bg-neon text-neon-foreground hover:bg-neon/90"
+        >
+          {copied ? (
+            <>
+              <Check className="mr-1.5 h-4 w-4" /> Copied
+            </>
+          ) : (
+            <>
+              <Copy className="mr-1.5 h-4 w-4" /> Copy
+            </>
+          )}
+        </Button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        <span>Auth: <span className="font-mono text-foreground/80">Bearer ${"{"}LOVABLE_INGEST_KEY{"}"}</span></span>
+        <span>Expects: <span className="font-mono text-foreground/80">{`{ source, title, budget, description }`}</span></span>
+        <span className="inline-flex items-center gap-1 text-neon">
+          <span className="h-1.5 w-1.5 rounded-full bg-neon animate-pulse" /> endpoint healthy
+        </span>
+      </div>
+    </div>
+  );
+}
+
