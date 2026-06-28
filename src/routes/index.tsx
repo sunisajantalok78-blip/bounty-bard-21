@@ -443,23 +443,17 @@ function MetricCard({
 /* ---------------- Portfolio Tab ---------------- */
 
 function PortfolioTab() {
-  const [name, setName] = useState("Alex Carter");
-  const [linkedin, setLinkedin] = useState("https://linkedin.com/in/alexcarter");
-  const [facebook, setFacebook] = useState("https://facebook.com/alexbuilds");
+  const [name, setName] = useState(developerProfile.name);
+  const [role, setRole] = useState(developerProfile.role);
+  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
+  const [facebook, setFacebook] = useState(developerProfile.facebook);
   const [stack, setStack] = useState(
-    `Active repos:
-1. realtime-sync       — WebSocket/socket.io reconnection toolkit (TS, Node 20)
-2. tenant-billing-kit  — Stripe Connect + usage metering on Supabase
-3. next-migrate-toolkit— Next.js 13 → App Router migration helpers
-4. hydrogen-perf-audit — Shopify Hydrogen perf audit + RSC streaming
-5. resume-parse-edge   — LLM resume parser running on edge functions
-6. ai-rag-starter      — pgvector + Postgres RAG kit (Drizzle, Hono)
-7. workflow-canvas     — drag-drop visual workflow builder (React Flow)
-8. invoice-pdf-gen     — Puppeteer-less PDF invoicing (React + Resvg)
-9. crm-light           — multi-tenant CRM with row-level security`,
+    portfolioRepos
+      .map((r, i) => `${i + 1}. ${r.name} — ${r.tagline}\n   stack: ${r.stack}`)
+      .join("\n"),
   );
   const [prompt, setPrompt] = useState(
-    `You are an autonomous pitcher writing on behalf of {{name}}, a senior full-stack engineer.
+    `You are an autonomous pitcher writing on behalf of {{name}} ({{role}}).
 
 Voice:
 - Direct, polite, confident. No fluff. No emojis.
