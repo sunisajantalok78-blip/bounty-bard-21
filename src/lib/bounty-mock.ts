@@ -10,97 +10,125 @@ export type Lead = {
   status: "new" | "pitched" | "won";
 };
 
+export type PortfolioRepo = {
+  name: string;
+  tagline: string;
+  stack: string;
+};
+
+export const portfolioRepos: PortfolioRepo[] = [
+  {
+    name: "SiamCheck AI",
+    tagline: "Thai LegalTech / RegTech OCR + LLM compliance layer",
+    stack: "Python, Tesseract OCR, Claude API, Thai NLP",
+  },
+  {
+    name: "The-Labor-Shield-Thailand",
+    tagline: "Thai Labor Protection Act compliance checker",
+    stack: "Next.js, Supabase, LLM rule-engine",
+  },
+  {
+    name: "SmartQuote AI",
+    tagline: "B2B workflow automation via Make.com / n8n / Claude API",
+    stack: "Make.com, n8n, Claude API, Google Workspace",
+  },
+  {
+    name: "v0-half-life-3d-shooter",
+    tagline: "HTML5 Canvas 3D rendering game engine",
+    stack: "TypeScript, WebGL, Canvas2D, custom raycaster",
+  },
+  {
+    name: "Interactive Smart Restaurant Menu",
+    tagline: "F&B matrix via LINE Bot API & Supabase Realtime",
+    stack: "Next.js, Supabase Realtime, LINE Messaging API",
+  },
+  {
+    name: "Relocation TH Ecosystem Hub",
+    tagline: "Expat tracking database & onboarding form wizards",
+    stack: "React, Supabase, multi-step wizard forms",
+  },
+  {
+    name: "Swedish Via English Language Suite",
+    tagline: "EdTech web app with mnemonic tutoring",
+    stack: "React, spaced-repetition engine, LLM hints",
+  },
+  {
+    name: "High-Volatility Gaming Session Tracker",
+    tagline: "High-frequency analytics canvas & risk calculator",
+    stack: "React, Canvas charts, statistical risk model",
+  },
+  {
+    name: "VibeVelocity AI",
+    tagline: "Dark-mode command center for elite product developers",
+    stack: "Next.js, Tailwind, AI orchestration",
+  },
+];
+
 export const seedLeads: Lead[] = [
   {
     id: "ld_001",
     source: "Algora",
-    title: "Fix WebSocket reconnection bug in real-time chat SDK",
-    budget: 850,
+    title: "Automated compliance checker for Thai legal documents",
+    budget: 350,
     urgency: "High",
     postedAt: "12:51",
     description:
-      "Our Node.js WebSocket client drops connections after ~30s idle behind certain corporate proxies. Looking for someone with deep WS / socket.io experience to patch reconnect-with-backoff, write tests, and open a PR against our open source repo. Stack: Node 20, TypeScript, socket.io 4.x.",
+      "Need an automated compliance checker script for Thai legal documents. Must extract text (OCR) and summarize key risks in English. Bonus if it can flag clauses that conflict with the Thai Labor Protection Act.",
     pitch:
-      "Hey team — I noticed the WS drop issue and I've shipped two production reconnect layers for similar setups (one in my `realtime-sync` repo on GitHub using exponential backoff + heartbeat, another in a chat SaaS I built). I can deliver a tested PR with backoff, jitter, and a proxy-friendly heartbeat within 24h. Happy to scope this to a fixed $850 — payable on merge. Want me to start?",
+      "Hey — this is literally what I built SiamCheck AI for: a Thai LegalTech OCR + LLM pipeline that ingests Thai-language docs, extracts text, and produces English risk summaries. For Labor Protection Act conflicts I can drop in the rule-engine from my The-Labor-Shield-Thailand repo to auto-flag non-compliant clauses. I can deliver a working CLI + JSON output in 3–4 days. Fixed $350 on delivery. Want me to start with a sample doc?",
     status: "new",
   },
   {
     id: "ld_002",
-    source: "GitHub",
-    title: "Bounty: Migrate Next.js 13 app to App Router + Server Actions",
-    budget: 1400,
-    urgency: "Medium",
+    source: "LinkedIn",
+    title: "Automate B2B client onboarding & proposal-to-CRM pipeline",
+    budget: 600,
+    urgency: "Critical",
     postedAt: "12:48",
     description:
-      "Legacy Next.js 13 pages-router project (~40 routes). Need clean migration to App Router with Server Actions, RSC where appropriate, and Tailwind v4 upgrade. Repo is public, full test suite included.",
+      "Looking for an expert to automate our B2B client onboarding pipeline. We waste too much time manually entering CRM data from incoming proposals. Prefer n8n / Make or custom API integrations.",
     pitch:
-      "I've done two App Router migrations of similar scope this quarter — one is live in my pinned repo `next-migrate-toolkit`. I can run the migration in 4 phases (routing → data → server actions → tailwind v4), keep tests green at every step, and ship in ~6 days. Fixed $1,400 works. Want a diff plan first?",
+      "This is the exact problem I solved with SmartQuote AI — a B2B workflow automation layer built on Make.com + n8n + Claude API that parses inbound proposals, structures the data, and pushes clean records straight into the CRM. It slashes proposal-to-CRM time by ~80% and removes manual entry entirely. I can wire it into your stack in under a week. Fixed $600, milestone-paid. Want a 15-min architecture call to map your CRM fields?",
     status: "new",
   },
   {
     id: "ld_003",
-    source: "LinkedIn",
-    title: "YC startup needs Stripe + multi-tenant billing built in 10 days",
-    budget: 3200,
-    urgency: "Critical",
+    source: "Facebook",
+    title: "Localized digital menu system for Bangkok restaurant chain",
+    budget: 200,
+    urgency: "Medium",
     postedAt: "12:42",
     description:
-      "Pre-seed B2B SaaS. Need Stripe Connect, per-org subscriptions, usage metering, invoicing, and a customer portal. React + Supabase backend already in place.",
+      "Need a localized digital menu system for a restaurant chain in Bangkok with real-time updates and Messenger / LINE bot integration for orders and promotions.",
     pitch:
-      "I shipped exactly this combo (Stripe Connect + usage metering on Supabase) in my repo `tenant-billing-kit` — it's battle-tested. I can drop it in, customize, wire webhooks, and run a paid sandbox demo by day 4. $3,200 fixed, milestone-paid. Free 20-min architecture call to confirm scope?",
+      "Perfect fit — I built Interactive Smart Restaurant Menu for exactly this: a localized F&B menu running on Supabase Realtime (price/availability updates push instantly to every device) with LINE Bot API hooked in for orders and promo broadcasts. Thai + English out of the box. I can stand up your chain on it within a week. Fixed $200, includes deploy + LINE channel setup. Shall I send the demo link?",
     status: "new",
   },
   {
     id: "ld_004",
-    source: "Facebook",
-    title: "Shopify Hydrogen storefront perf optimization",
-    budget: 600,
-    urgency: "Low",
+    source: "LinkedIn",
+    title: "High-end interactive 3D landing page + performance dashboard canvas",
+    budget: 450,
+    urgency: "High",
     postedAt: "12:30",
     description:
-      "Hydrogen storefront LCP is 4.2s on mobile. Need a perf engineer to get it under 2.0s without sacrificing CMS flexibility.",
+      "Looking for a high-end interactive 3D landing page with complex animations and a high-performance web dashboard canvas. Must be smooth on mid-range laptops.",
     pitch:
-      "Hydrogen perf is one of my niches — see `hydrogen-perf-audit` on my GitHub. I'll run a Lighthouse + WebPageTest audit, ship a PR (image pipeline, RSC streaming, font subset, edge cache headers) and guarantee sub-2s LCP or refund. $600 flat.",
-    status: "new",
-  },
-  {
-    id: "ld_005",
-    source: "Algora",
-    title: "Bounty: TypeScript types broken in v3 release",
-    budget: 250,
-    urgency: "Medium",
-    postedAt: "12:18",
-    description:
-      "Generic inference regressed in v3.0 for the `useStore` hook. Need a typed reproduction + fix + tests.",
-    pitch:
-      "Quick win — looks like a conditional inference regression. I'll open a failing test + fix PR today. $250 on merge works.",
-    status: "pitched",
-  },
-  {
-    id: "ld_006",
-    source: "Upwork",
-    title: "Build AI-powered resume parser API",
-    budget: 1800,
-    urgency: "High",
-    postedAt: "11:55",
-    description:
-      "Need a production API that takes PDF/DOCX resumes and returns structured JSON (skills, experience, education) using LLM extraction. Should handle 1000s/day.",
-    pitch:
-      "I've built this exact pipeline — `resume-parse-edge` on my GitHub uses streaming LLM extraction + schema validation, runs on edge functions, ~$0.002/parse. I can deliver a hosted API + docs in 5 days. $1,800 fixed.",
+      "I write canvas/3D engines from scratch — see my v0-half-life-3d-shooter repo: an HTML5 Canvas 3D rendering engine running a full raycasted shooter at 60fps without WebGL frameworks. I can repurpose that pipeline for your landing page (interactive 3D hero) and the same render loop into a high-FPS dashboard canvas. Delivery in 7 days, fixed $450. Want a Loom of the engine running so you can judge the feel?",
     status: "new",
   },
 ];
 
 export const seedLogs = [
-  { t: "12:51", level: "info" as const, msg: "Algora webhook: new $850 bounty matched stack (Node/WS)" },
-  { t: "12:50", level: "ok" as const, msg: "AI pitch generated for lead ld_001 (confidence 94%)" },
-  { t: "12:48", level: "info" as const, msg: "GitHub Issues scan: 1 high-priority bounty found" },
-  { t: "12:45", level: "ok" as const, msg: "Pitch sent → ld_005 via n8n webhook (status 200)" },
-  { t: "12:42", level: "warn" as const, msg: "LinkedIn lead extracted — CRITICAL urgency, $3.2k" },
-  { t: "12:38", level: "info" as const, msg: "Scanning Facebook dev groups (12 groups, 340 posts)" },
-  { t: "12:30", level: "ok" as const, msg: "Conversion logged: ld_998 paid $1,200 via Stripe" },
-  { t: "12:24", level: "info" as const, msg: "n8n flow #07 triggered: enrich lead → score → route" },
-  { t: "12:18", level: "info" as const, msg: "Algora: TS regression bounty matched (low effort)" },
+  { t: "12:51", level: "info" as const, msg: "Algora webhook: $350 Thai-legal OCR bounty matched SiamCheck AI" },
+  { t: "12:50", level: "ok" as const, msg: "AI pitch generated for ld_001 (confidence 96%)" },
+  { t: "12:48", level: "warn" as const, msg: "LinkedIn lead extracted — CRITICAL, $600 onboarding automation" },
+  { t: "12:45", level: "ok" as const, msg: "SmartQuote AI matched to ld_002 (Make/n8n stack)" },
+  { t: "12:42", level: "info" as const, msg: "Facebook Bangkok F&B group scan: 1 restaurant lead found" },
+  { t: "12:38", level: "info" as const, msg: "Repo matcher: Interactive Smart Restaurant Menu → ld_003" },
+  { t: "12:30", level: "ok" as const, msg: "LinkedIn lead ld_004 matched v0-half-life-3d-shooter engine" },
+  { t: "12:24", level: "info" as const, msg: "n8n flow #07 triggered: enrich → score → route" },
+  { t: "12:18", level: "info" as const, msg: "Portfolio index rebuilt (9 repos, 42 keywords)" },
   { t: "12:05", level: "ok" as const, msg: "System health: all 4 integrations green" },
 ];
 
@@ -110,3 +138,13 @@ export const seedStats = {
   conversions: 11,
   earned: 18450,
 };
+
+export const developerProfile = {
+  name: "Bahdan Los",
+  role: "High-Velocity Vibe Coder & AI-Workflow Architect",
+  linkedin: "https://www.linkedin.com/in/bahdan-los",
+  facebook: "https://www.facebook.com/bahdan.los",
+};
+
+export const MOCK_WEBHOOK_URL =
+  "https://bounty-hunter-bahdan.b4a.run/api/v1/incoming-lead";
