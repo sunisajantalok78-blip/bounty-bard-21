@@ -384,6 +384,8 @@ function MonitorTab({
           </div>
         </ScrollArea>
       </div>
+
+      <WebhookField />
     </div>
   );
 }
