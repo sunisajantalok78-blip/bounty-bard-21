@@ -486,6 +486,9 @@ Never invent credentials. Never overpromise. Never copy boilerplate.`,
           <Field label="Full name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
+          <Field label="Role / headline">
+            <Input value={role} onChange={(e) => setRole(e.target.value)} />
+          </Field>
           <Field label="LinkedIn URL">
             <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} />
           </Field>
