@@ -852,6 +852,79 @@ function PayoutsTab({ stats }: { stats: typeof seedStats }) {
           </ul>
         </div>
       </div>
+
+      <WebhookField />
     </div>
   );
 }
+
+/* ---------------- Webhook Field ---------------- */
+
+function WebhookField() {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(MOCK_WEBHOOK_URL);
+      setCopied(true);
+      toast.success("Webhook URL copied", {
+        description: "Paste it into your n8n / Make.com HTTP node.",
+      });
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Copy failed — select & copy manually.");
+    }
+  };
+
+  return (
+    <div className="glass-panel rounded-2xl p-5">
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-neon/10 text-neon">
+            <Webhook className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold">Incoming lead webhook</h3>
+            <p className="text-xs text-muted-foreground">
+              Point your n8n / Make.com scenarios at this endpoint to push leads into the engine.
+            </p>
+          </div>
+        </div>
+        <Badge variant="outline" className="border-neon/30 bg-neon/10 text-[10px] text-neon">
+          POST · JSON · live
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2 rounded-xl border border-neon/30 bg-surface/60 p-1.5 pl-3">
+        <span className="font-mono text-[11px] font-bold text-neon">POST</span>
+        <Input
+          readOnly
+          value={MOCK_WEBHOOK_URL}
+          onFocus={(e) => e.currentTarget.select()}
+          className="h-9 border-0 bg-transparent font-mono text-sm text-foreground/90 focus-visible:ring-0"
+        />
+        <Button
+          size="sm"
+          onClick={handleCopy}
+          className="h-9 shrink-0 bg-neon text-neon-foreground hover:bg-neon/90"
+        >
+          {copied ? (
+            <>
+              <Check className="mr-1.5 h-4 w-4" /> Copied
+            </>
+          ) : (
+            <>
+              <Copy className="mr-1.5 h-4 w-4" /> Copy
+            </>
+          )}
+        </Button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        <span>Auth: <span className="font-mono text-foreground/80">Bearer ${"{"}LOVABLE_INGEST_KEY{"}"}</span></span>
+        <span>Expects: <span className="font-mono text-foreground/80">{`{ source, title, budget, description }`}</span></span>
+        <span className="inline-flex items-center gap-1 text-neon">
+          <span className="h-1.5 w-1.5 rounded-full bg-neon animate-pulse" /> endpoint healthy
+        </span>
+      </div>
+    </div>
+  );
+}
+
