@@ -1089,7 +1089,7 @@ function MarketingBotTab() {
                 <SectionCard
                   icon={Target}
                   title="Profile audit"
-                  action={
+                  right={
                     <ChatLauncher
                       plan={plan}
                       profile={{
