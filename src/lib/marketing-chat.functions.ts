@@ -31,7 +31,7 @@ export const chatWithMarketingBot = createServerFn({ method: "POST" })
     const gateway = createLovableAiGatewayProvider(key);
     const model = gateway("google/gemini-3-flash-preview");
 
-    const profile = data.profile ?? {};
+    const profile = data.profile ?? { name: "", role: "", links: {}, portfolio: "", goals: "" };
     const planSnippet = data.plan ? JSON.stringify(data.plan).slice(0, 6000) : "(no plan generated yet)";
 
     const system = `You are the user's personal AI MARKETING COACH + FREELANCE GROWTH STRATEGIST.
