@@ -51,6 +51,15 @@ const Input = z.object({
         .optional()
         .default({}),
       notes: z.string().optional().default(""),
+      audit_history: z
+        .array(
+          z.object({
+            at: z.string().optional().default(""),
+            audit: z.unknown(),
+          }),
+        )
+        .optional()
+        .default([]),
     })
     .optional(),
 });
