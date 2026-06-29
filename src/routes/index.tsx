@@ -52,7 +52,7 @@ import {
   seedLogs,
   seedStats,
 } from "@/lib/bounty-mock";
-import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RotateCcw, Save, Target, X } from "lucide-react";
+import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RefreshCw, RotateCcw, Save, Square, Target, X } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
 import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
@@ -992,7 +992,17 @@ function MarketingBotTab() {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = usePersistedState<MarketingPlan | null>("bot.plan", null);
   const [planGeneratedAt, setPlanGeneratedAt] = usePersistedState<string | null>("bot.planGeneratedAt", null);
+  const [taskState, setTaskState] = usePersistedState<Record<string, { done: boolean; doneAt?: string }>>(
+    "bot.taskState",
+    {},
+  );
+  const [linkProgress, setLinkProgress] = usePersistedState<
+    Record<string, { lastCheckedAt: string; summary: string }>
+  >("bot.linkProgress", {});
+  const [progressNotes, setProgressNotes] = usePersistedState("bot.progressNotes", "");
+  const [checkingPlatform, setCheckingPlatform] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const recheckFn = useServerFn(chatWithMarketingBot);
 
 
   const portfolioText = useMemo(
@@ -1002,6 +1012,104 @@ function MarketingBotTab() {
         .join("\n"),
     [],
   );
+
+  // Flatten plan tasks → stable IDs for the completion tracker.
+  const allTasks = useMemo(() => {
+    const out: Array<{ id: string; day: string; task: string }> = [];
+    plan?.daily_actions?.forEach((d, i) => {
+      d.tasks?.forEach((t, j) => {
+        out.push({ id: `d${i}-t${j}`, day: d.day || `Day ${i + 1}`, task: t.task || "" });
+      });
+    });
+    return out;
+  }, [plan]);
+
+  const completedTasks = useMemo(
+    () =>
+      allTasks
+        .filter((t) => taskState[t.id]?.done)
+        .map((t) => ({ day: t.day, task: t.task, done_at: taskState[t.id]?.doneAt || "" })),
+    [allTasks, taskState],
+  );
+  const pendingTasks = useMemo(
+    () =>
+      allTasks
+        .filter((t) => !taskState[t.id]?.done)
+        .map((t) => ({ day: t.day, task: t.task })),
+    [allTasks, taskState],
+  );
+
+  const progressPayload = {
+    completed_tasks: completedTasks,
+    pending_tasks: pendingTasks,
+    link_progress: Object.fromEntries(
+      Object.entries(linkProgress).map(([k, v]) => [
+        k,
+        { last_checked_at: v.lastCheckedAt, summary: v.summary },
+      ]),
+    ),
+    notes: progressNotes,
+  };
+
+  const toggleTask = (id: string) =>
+    setTaskState((s) => {
+      const cur = s[id];
+      if (cur?.done) {
+        const { [id]: _omit, ...rest } = s;
+        return rest;
+      }
+      return { ...s, [id]: { done: true, doneAt: new Date().toISOString() } };
+    });
+
+  const recheckLink = async (platform: string, url: string) => {
+    if (!url.trim()) {
+      toast.error("Add a URL first", { description: `Paste your ${platform} link before re-checking.` });
+      return;
+    }
+    setCheckingPlatform(platform);
+    try {
+      const prev = linkProgress[platform];
+      const prompt = `RE-CHECK my ${platform} profile: ${url}
+
+Previous re-check (${prev?.lastCheckedAt ? new Date(prev.lastCheckedAt).toLocaleString() : "none yet"}):
+${prev?.summary || "(no prior re-check on this profile)"}
+
+Use the "CURRENT EXECUTION STATE" you already have (completed tasks, pending tasks, other profile re-checks) to assess where THIS profile stands NOW.
+
+Respond with a tight progress report in this exact markdown layout:
+
+**Status:** <one line: improving / stalled / regressing>
+**New score:** <0-100> (previous: ${prev ? "see above" : "n/a"})
+**What changed since last check:** <bullets>
+**Top 3 highest-leverage fixes RIGHT NOW for this profile:** <numbered, each <= 20 words, concrete>
+**Next 24h action:** <one specific task, time-boxed>
+**Follow-up question for me:** <one sharp question>`;
+
+      const res = await recheckFn({
+        data: {
+          messages: [{ role: "user", content: prompt }],
+          plan: plan as unknown,
+          profile: {
+            name: developerProfile.name,
+            role: developerProfile.role,
+            links: { facebook, linkedin, fiverr, github, other },
+            portfolio: portfolioText,
+            goals,
+          },
+          progress: progressPayload,
+        },
+      });
+      setLinkProgress((s) => ({
+        ...s,
+        [platform]: { lastCheckedAt: new Date().toISOString(), summary: res.text },
+      }));
+      toast.success(`${platform} re-checked`, { description: "Progress saved — AI now remembers this state." });
+    } catch (e) {
+      toast.error("Re-check failed", { description: e instanceof Error ? e.message : "Unknown error" });
+    } finally {
+      setCheckingPlatform(null);
+    }
+  };
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -1102,18 +1210,136 @@ function MarketingBotTab() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        <SectionCard icon={Target} title="Profile links to analyze" subtitle="Paste every public profile the bot should audit.">
+        <div className="grid gap-6">
+        <SectionCard
+          icon={Target}
+          title="Profile links to analyze"
+          subtitle="Paste each public profile, then hit Update after acting on the AI's advice."
+        >
           <div className="grid gap-3">
-            <Field label="LinkedIn"><Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." /></Field>
-            <Field label="Facebook"><Input value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="https://facebook.com/..." /></Field>
-            <Field label="Fiverr gig / profile"><Input value={fiverr} onChange={(e) => setFiverr(e.target.value)} placeholder="https://fiverr.com/..." /></Field>
-            <Field label="GitHub"><Input value={github} onChange={(e) => setGithub(e.target.value)} placeholder="https://github.com/..." /></Field>
-            <Field label="Other (Upwork / X / IG / site)"><Input value={other} onChange={(e) => setOther(e.target.value)} placeholder="https://..." /></Field>
+            <LinkRow
+              label="LinkedIn"
+              value={linkedin}
+              onChange={setLinkedin}
+              placeholder="https://linkedin.com/in/..."
+              checking={checkingPlatform === "LinkedIn"}
+              progress={linkProgress["LinkedIn"]}
+              onCheck={() => recheckLink("LinkedIn", linkedin)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="Facebook"
+              value={facebook}
+              onChange={setFacebook}
+              placeholder="https://facebook.com/..."
+              checking={checkingPlatform === "Facebook"}
+              progress={linkProgress["Facebook"]}
+              onCheck={() => recheckLink("Facebook", facebook)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="Fiverr gig / profile"
+              value={fiverr}
+              onChange={setFiverr}
+              placeholder="https://fiverr.com/..."
+              checking={checkingPlatform === "Fiverr"}
+              progress={linkProgress["Fiverr"]}
+              onCheck={() => recheckLink("Fiverr", fiverr)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="GitHub"
+              value={github}
+              onChange={setGithub}
+              placeholder="https://github.com/..."
+              checking={checkingPlatform === "GitHub"}
+              progress={linkProgress["GitHub"]}
+              onCheck={() => recheckLink("GitHub", github)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="Other (Upwork / X / IG / site)"
+              value={other}
+              onChange={setOther}
+              placeholder="https://..."
+              checking={checkingPlatform === "Other"}
+              progress={linkProgress["Other"]}
+              onCheck={() => recheckLink("Other", other)}
+              disabledRecheck={!plan}
+            />
             <Field label="Goals for the bot">
               <Textarea value={goals} onChange={(e) => setGoals(e.target.value)} rows={4} className="resize-none text-sm" />
             </Field>
+            {!plan && (
+              <p className="text-[11px] text-muted-foreground">
+                Generate a plan first — then the per-profile <span className="text-neon">Update</span> buttons unlock and
+                start tracking progress over time.
+              </p>
+            )}
           </div>
         </SectionCard>
+
+        <SectionCard
+          icon={CheckCircle2}
+          title="Business state & task tracker"
+          subtitle="The AI uses this as memory — it knows what's already done."
+          right={
+            <Badge variant="outline" className="border-neon/30 bg-neon/10 text-neon">
+              {completedTasks.length} / {allTasks.length || 0} done
+            </Badge>
+          }
+        >
+          {allTasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Tasks will appear here as soon as you generate a plan.
+            </p>
+          ) : (
+            <>
+              <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                <div
+                  className="h-full bg-neon transition-all"
+                  style={{
+                    width: `${allTasks.length ? Math.round((completedTasks.length / allTasks.length) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Tick off tasks as you complete them. Re-checks and the AI Coach will skip anything already done.
+              </p>
+            </>
+          )}
+          <div className="mt-3">
+            <Field label="Notes about current business state (optional)">
+              <Textarea
+                value={progressNotes}
+                onChange={(e) => setProgressNotes(e.target.value)}
+                rows={3}
+                placeholder="e.g. 2 inbound leads this week, posted on LinkedIn Mon+Wed, Fiverr gig live but 0 orders…"
+                className="resize-none text-sm"
+              />
+            </Field>
+          </div>
+          {(completedTasks.length > 0 || Object.keys(linkProgress).length > 0) && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!confirm("Reset all task completions and per-profile re-check history?")) return;
+                setTaskState({});
+                setLinkProgress({});
+                setProgressNotes("");
+                clearPersisted("bot.taskState");
+                clearPersisted("bot.linkProgress");
+                clearPersisted("bot.progressNotes");
+                toast("Progress reset");
+              }}
+              className="mt-3 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Reset progress history
+            </button>
+          )}
+        </SectionCard>
+        </div>
+
 
         <div className="grid gap-6">
           {error && (
@@ -1169,6 +1395,7 @@ function MarketingBotTab() {
                       portfolio: portfolioText,
                       goals,
                     }}
+                    progress={progressPayload}
                   />
                   <div className="mt-4 grid gap-3">
                     {plan.profile_audit.map((a, i) => (
@@ -1201,15 +1428,33 @@ function MarketingBotTab() {
                           <span className="text-xs text-muted-foreground">{d.focus}</span>
                         </div>
                         <ul className="space-y-1.5">
-                          {d.tasks?.map((t, j) => (
-                            <li key={j} className="grid grid-cols-[60px_1fr] gap-3 text-sm">
-                              <span className="font-mono text-xs text-muted-foreground">{t.time}</span>
-                              <div>
-                                <div className="font-medium">{t.task}</div>
-                                {t.why && <div className="text-xs text-muted-foreground">{t.why}</div>}
-                              </div>
-                            </li>
-                          ))}
+                          {d.tasks?.map((t, j) => {
+                            const id = `d${i}-t${j}`;
+                            const done = !!taskState[id]?.done;
+                            return (
+                              <li key={j} className="grid grid-cols-[28px_60px_1fr] items-start gap-3 text-sm">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTask(id)}
+                                  className={`mt-0.5 grid h-5 w-5 place-items-center rounded border transition ${
+                                    done
+                                      ? "border-neon bg-neon text-neon-foreground"
+                                      : "border-border bg-surface hover:border-neon/50"
+                                  }`}
+                                  aria-label={done ? "Mark task incomplete" : "Mark task complete"}
+                                >
+                                  {done ? <Check className="h-3 w-3" /> : <Square className="h-3 w-3 opacity-0" />}
+                                </button>
+                                <span className="font-mono text-xs text-muted-foreground">{t.time}</span>
+                                <div>
+                                  <div className={`font-medium ${done ? "text-muted-foreground line-through" : ""}`}>
+                                    {t.task}
+                                  </div>
+                                  {t.why && <div className="text-xs text-muted-foreground">{t.why}</div>}
+                                </div>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}
@@ -1326,6 +1571,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 function ChatLauncher({
   plan,
   profile,
+  progress,
 }: {
   plan: MarketingPlan;
   profile: {
@@ -1334,6 +1580,12 @@ function ChatLauncher({
     links: Record<string, string>;
     portfolio: string;
     goals: string;
+  };
+  progress?: {
+    completed_tasks: Array<{ day: string; task: string; done_at: string }>;
+    pending_tasks: Array<{ day: string; task: string }>;
+    link_progress: Record<string, { last_checked_at: string; summary: string }>;
+    notes: string;
   };
 }) {
   const [open, setOpen] = useState(false);
@@ -1366,6 +1618,7 @@ function ChatLauncher({
           messages: next,
           plan: plan as unknown,
           profile,
+          progress,
         },
       });
       setMessages((m) => [...m, { role: "assistant", content: res.text }]);
@@ -1482,3 +1735,77 @@ function ChatLauncher({
   );
 }
 
+
+/* ---------------- Profile Link Row with progress re-check ---------------- */
+
+function LinkRow({
+  label,
+  value,
+  onChange,
+  placeholder,
+  checking,
+  progress,
+  onCheck,
+  disabledRecheck,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  checking: boolean;
+  progress?: { lastCheckedAt: string; summary: string };
+  onCheck: () => void;
+  disabledRecheck?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </Label>
+        {progress && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-[10px] text-muted-foreground underline-offset-2 hover:text-neon hover:underline"
+          >
+            {open ? "hide" : "show"} last check ·{" "}
+            {new Date(progress.lastCheckedAt).toLocaleString()}
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={checking || disabledRecheck}
+          onClick={onCheck}
+          className="h-9 shrink-0 border-neon/30 text-neon hover:bg-neon/10 hover:text-neon disabled:opacity-50"
+          title={disabledRecheck ? "Generate a plan first" : `Re-check ${label} progress`}
+        >
+          {checking ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              {progress ? "Update" : "Check"}
+            </>
+          )}
+        </Button>
+      </div>
+      {open && progress && (
+        <div className="mt-1 rounded-lg border border-neon/20 bg-surface/60 p-3 text-xs leading-relaxed text-foreground/85 whitespace-pre-wrap">
+          {progress.summary}
+        </div>
+      )}
+    </div>
+  );
+}

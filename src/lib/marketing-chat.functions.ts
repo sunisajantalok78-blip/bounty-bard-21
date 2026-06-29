@@ -19,6 +19,40 @@ const Input = z.object({
       goals: z.string().optional().default(""),
     })
     .optional(),
+  progress: z
+    .object({
+      completed_tasks: z
+        .array(
+          z.object({
+            day: z.string().optional().default(""),
+            task: z.string(),
+            done_at: z.string().optional().default(""),
+          }),
+        )
+        .optional()
+        .default([]),
+      pending_tasks: z
+        .array(
+          z.object({
+            day: z.string().optional().default(""),
+            task: z.string(),
+          }),
+        )
+        .optional()
+        .default([]),
+      link_progress: z
+        .record(
+          z.string(),
+          z.object({
+            last_checked_at: z.string().optional().default(""),
+            summary: z.string().optional().default(""),
+          }),
+        )
+        .optional()
+        .default({}),
+      notes: z.string().optional().default(""),
+    })
+    .optional(),
 });
 
 export const chatWithMarketingBot = createServerFn({ method: "POST" })
@@ -34,6 +68,29 @@ export const chatWithMarketingBot = createServerFn({ method: "POST" })
     const profile = data.profile ?? { name: "", role: "", links: {}, portfolio: "", goals: "" };
     const planSnippet = data.plan ? JSON.stringify(data.plan).slice(0, 6000) : "(no plan generated yet)";
 
+    const progress = data.progress;
+    const completed = progress?.completed_tasks ?? [];
+    const pending = progress?.pending_tasks ?? [];
+    const linkProg = progress?.link_progress ?? {};
+    const totalTasks = completed.length + pending.length;
+    const progressBlock = progress
+      ? `CURRENT EXECUTION STATE (this is the source of truth — DO NOT re-suggest things already done):
+- Tasks completed: ${completed.length} / ${totalTasks}
+- Completed:
+${completed.map((t) => `  ✓ [${t.day}] ${t.task}${t.done_at ? ` (done ${t.done_at})` : ""}`).join("\n") || "  (none yet)"}
+- Still pending:
+${pending.map((t) => `  ☐ [${t.day}] ${t.task}`).join("\n") || "  (none)"}
+- Per-profile progress notes (from previous re-checks):
+${
+  Object.keys(linkProg).length
+    ? Object.entries(linkProg)
+        .map(([k, v]) => `  • ${k} (checked ${v.last_checked_at || "?"}): ${(v.summary || "").slice(0, 600)}`)
+        .join("\n")
+    : "  (no previous re-checks)"
+}
+- Free-form notes from operator: ${progress.notes || "(none)"}`
+      : "CURRENT EXECUTION STATE: (no progress tracked yet)";
+
     const system = `You are the user's personal AI MARKETING COACH + FREELANCE GROWTH STRATEGIST.
 You already produced this marketing plan for them:
 
@@ -47,8 +104,12 @@ DEVELOPER CONTEXT:
 - Portfolio:
 ${profile.portfolio || "(none)"}
 
+${progressBlock}
+
 HOW YOU BEHAVE:
 - Be hyper-helpful and proactive. Don't wait to be asked — anticipate the next step.
+- ALWAYS account for what is already DONE vs PENDING above. Never tell the user to do a task they already checked off.
+- Build on previous per-profile re-checks; treat them as memory of the current state of each profile/business.
 - Give CONCRETE, step-by-step instructions ("Do X, then Y, here is the exact copy/paste…").
 - When the user asks vague questions, give the best answer first, THEN ask 1–2 sharp follow-up questions to refine.
 - Always end with a clear NEXT ACTION the user should take (numbered, time-boxed).
