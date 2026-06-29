@@ -1699,6 +1699,7 @@ function ChatLauncher({
   plan,
   profile,
   progress,
+  onCompleteTask,
 }: {
   plan: MarketingPlan;
   profile: {
@@ -1713,17 +1714,27 @@ function ChatLauncher({
     pending_tasks: Array<{ day: string; task: string }>;
     link_progress: Record<string, { last_checked_at: string; summary: string }>;
     notes: string;
+    audit_history?: Array<{ at: string; audit: unknown }>;
   };
+  onCompleteTask?: (task: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const send = useServerFn(chatWithMarketingBot);
-  const [messages, setMessages] = useState<ChatMsg[]>([
+  const initialMessages: ChatMsg[] = [
     {
       role: "assistant",
       content:
-        "Hi — I'm your marketing coach. I have your full plan in context. Ask me anything (e.g. *\"walk me through Day 1 step by step\"*, *\"write the first LinkedIn post for me\"*, *\"what should I do RIGHT NOW?\"*).\n\nWhat's the very first thing you want to tackle?",
+        "Hi — I'm your marketing coach. I remember our previous chats, your profile audit history, and every task you've ticked off. Ask me anything (e.g. *\"walk me through Day 1\"*, *\"how have my profiles improved?\"*, *\"what should I do RIGHT NOW?\"*).\n\nAny task I suggest will have a **✓ Mark complete** button — tap it and I'll remember it next time.",
     },
-  ]);
+  ];
+  const [messages, setMessages] = usePersistedState<ChatMsg[]>(
+    "bot.chatMessages",
+    initialMessages,
+  );
+  const [completedFromChat, setCompletedFromChat] = usePersistedState<Record<string, true>>(
+    "bot.chatCompletedKeys",
+    {},
+  );
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1731,6 +1742,16 @@ function ChatLauncher({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  const clearChat = () => {
+    setMessages(initialMessages);
+    setCompletedFromChat({});
+  };
+
+  const markDone = (key: string, task: string) => {
+    setCompletedFromChat((s) => ({ ...s, [key]: true }));
+    onCompleteTask?.(task);
+  };
 
   const ask = async (text: string) => {
     const q = text.trim();
