@@ -980,17 +980,20 @@ function WebhookField() {
 
 function MarketingBotTab() {
   const run = useServerFn(generateMarketingPlan);
-  const [facebook, setFacebook] = useState(developerProfile.facebook);
-  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
-  const [fiverr, setFiverr] = useState("https://www.fiverr.com/");
-  const [github, setGithub] = useState("https://github.com/bahdan-los");
-  const [other, setOther] = useState("");
-  const [goals, setGoals] = useState(
+  const [facebook, setFacebook] = usePersistedState("bot.facebook", developerProfile.facebook);
+  const [linkedin, setLinkedin] = usePersistedState("bot.linkedin", developerProfile.linkedin);
+  const [fiverr, setFiverr] = usePersistedState("bot.fiverr", "https://www.fiverr.com/");
+  const [github, setGithub] = usePersistedState("bot.github", "https://github.com/bahdan-los");
+  const [other, setOther] = usePersistedState("bot.other", "");
+  const [goals, setGoals] = usePersistedState(
+    "bot.goals",
     "Land 3–5 paid web-dev / AI-automation gigs in the next 14 days. Target $300–$1500 per project. Build inbound flow from LinkedIn + Fiverr.",
   );
   const [loading, setLoading] = useState(false);
-  const [plan, setPlan] = useState<MarketingPlan | null>(null);
+  const [plan, setPlan] = usePersistedState<MarketingPlan | null>("bot.plan", null);
+  const [planGeneratedAt, setPlanGeneratedAt] = usePersistedState<string | null>("bot.planGeneratedAt", null);
   const [error, setError] = useState<string | null>(null);
+
 
   const portfolioText = useMemo(
     () =>
