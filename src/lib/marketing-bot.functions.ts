@@ -137,3 +137,90 @@ export type MarketingPlan = {
   };
   next_milestones?: Array<{ when?: string; milestone?: string; expected_usd?: number }>;
 };
+
+/* ---------- Profile audit refresh (re-runs after task completions) ---------- */
+
+const RefreshInput = z.object({
+  profileLinks: z.object({
+    facebook: z.string().optional().default(""),
+    linkedin: z.string().optional().default(""),
+    fiverr: z.string().optional().default(""),
+    github: z.string().optional().default(""),
+    other: z.string().optional().default(""),
+  }),
+  goals: z.string().max(2000).optional().default(""),
+  portfolio: z.string().max(6000).optional().default(""),
+  previousAudit: z.unknown().optional(),
+  completedTasks: z
+    .array(z.object({ day: z.string().optional().default(""), task: z.string() }))
+    .optional()
+    .default([]),
+  pendingTasks: z
+    .array(z.object({ day: z.string().optional().default(""), task: z.string() }))
+    .optional()
+    .default([]),
+  notes: z.string().optional().default(""),
+});
+
+export const refreshProfileAudit = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => RefreshInput.parse(input))
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+
+    const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
+    const gateway = createLovableAiGatewayProvider(key);
+    const model = gateway("google/gemini-3-flash-preview");
+
+    const system = `You re-score a freelance developer's public profiles after they completed tasks from their plan.
+Return STRICT JSON only, an ARRAY shaped exactly:
+[ { "platform": string, "url": string, "score": number, "strengths": string[], "weaknesses": string[], "fix_now": string[] } ]
+No commentary. Scores must reflect the completed tasks (raise them when relevant tasks were done; never re-suggest things in fix_now that the user already completed).`;
+
+    const user = `LINKS:
+- LinkedIn: ${data.profileLinks.linkedin || "(none)"}
+- Facebook: ${data.profileLinks.facebook || "(none)"}
+- Fiverr:   ${data.profileLinks.fiverr || "(none)"}
+- GitHub:   ${data.profileLinks.github || "(none)"}
+- Other:    ${data.profileLinks.other || "(none)"}
+
+GOALS:
+${data.goals || "(unspecified)"}
+
+PORTFOLIO:
+${data.portfolio || "(none)"}
+
+PREVIOUS AUDIT (for reference / score history):
+${JSON.stringify(data.previousAudit ?? [], null, 2).slice(0, 4000)}
+
+TASKS THE USER HAS ALREADY COMPLETED (do NOT re-suggest these):
+${data.completedTasks.map((t) => `✓ [${t.day}] ${t.task}`).join("\n") || "(none)"}
+
+TASKS STILL PENDING:
+${data.pendingTasks.map((t) => `☐ [${t.day}] ${t.task}`).join("\n") || "(none)"}
+
+NOTES FROM OPERATOR:
+${data.notes || "(none)"}
+
+Now produce the refreshed JSON audit array.`;
+
+    const { text } = await generateText({ model, system, prompt: user });
+
+    const jsonStr = (() => {
+      const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (m) return m[1].trim();
+      const start = text.indexOf("[");
+      const end = text.lastIndexOf("]");
+      if (start >= 0 && end > start) return text.slice(start, end + 1);
+      return text;
+    })();
+
+    let audit: unknown;
+    try {
+      audit = JSON.parse(jsonStr);
+    } catch {
+      throw new Error("AI returned non-JSON for audit refresh.");
+    }
+    if (!Array.isArray(audit)) throw new Error("Refreshed audit was not an array.");
+    return { audit: audit as MarketingPlan["profile_audit"] };
+  });
