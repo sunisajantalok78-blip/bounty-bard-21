@@ -1000,6 +1000,12 @@ function MarketingBotTab() {
     Record<string, { lastCheckedAt: string; summary: string }>
   >("bot.linkProgress", {});
   const [progressNotes, setProgressNotes] = usePersistedState("bot.progressNotes", "");
+  const [auditHistory, setAuditHistory] = usePersistedState<
+    Array<{ at: string; audit: unknown }>
+  >("bot.auditHistory", []);
+  const [chatTasks, setChatTasks] = usePersistedState<
+    Array<{ id: string; task: string; source: string; done: boolean; doneAt?: string; addedAt: string }>
+  >("bot.chatTasks", []);
   const [checkingPlatform, setCheckingPlatform] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [auditRefreshing, setAuditRefreshing] = useState(false);
