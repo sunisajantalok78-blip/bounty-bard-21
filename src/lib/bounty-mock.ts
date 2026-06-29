@@ -135,8 +135,10 @@ export const seedStats = {
 export const developerProfile = {
   name: "Bahdan Los",
   role: "High-Velocity Vibe Coder & AI-Workflow Architect",
-  linkedin: "https://www.linkedin.com/in/bahdan-los",
-  facebook: "https://www.facebook.com/bahdan.los",
+  linkedin: "https://www.linkedin.com/in/sunisa-jantalok/",
+  facebook: "https://www.facebook.com/profile.php?id=61590944882685",
+  fiverr: "https://www.fiverr.com/s/5rW6QZ4",
+  github: "https://github.com/bagaleo",
 };
 
 export const MOCK_WEBHOOK_URL =
