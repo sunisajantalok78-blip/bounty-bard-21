@@ -982,8 +982,8 @@ function MarketingBotTab() {
   const run = useServerFn(generateMarketingPlan);
   const [facebook, setFacebook] = usePersistedState("bot.facebook", developerProfile.facebook);
   const [linkedin, setLinkedin] = usePersistedState("bot.linkedin", developerProfile.linkedin);
-  const [fiverr, setFiverr] = usePersistedState("bot.fiverr", "https://www.fiverr.com/");
-  const [github, setGithub] = usePersistedState("bot.github", "https://github.com/bahdan-los");
+  const [fiverr, setFiverr] = usePersistedState("bot.fiverr", developerProfile.fiverr);
+  const [github, setGithub] = usePersistedState("bot.github", developerProfile.github);
   const [other, setOther] = usePersistedState("bot.other", "");
   const [goals, setGoals] = usePersistedState(
     "bot.goals",
