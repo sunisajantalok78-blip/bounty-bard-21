@@ -992,7 +992,17 @@ function MarketingBotTab() {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = usePersistedState<MarketingPlan | null>("bot.plan", null);
   const [planGeneratedAt, setPlanGeneratedAt] = usePersistedState<string | null>("bot.planGeneratedAt", null);
+  const [taskState, setTaskState] = usePersistedState<Record<string, { done: boolean; doneAt?: string }>>(
+    "bot.taskState",
+    {},
+  );
+  const [linkProgress, setLinkProgress] = usePersistedState<
+    Record<string, { lastCheckedAt: string; summary: string }>
+  >("bot.linkProgress", {});
+  const [progressNotes, setProgressNotes] = usePersistedState("bot.progressNotes", "");
+  const [checkingPlatform, setCheckingPlatform] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const recheckFn = useServerFn(chatWithMarketingBot);
 
 
   const portfolioText = useMemo(
