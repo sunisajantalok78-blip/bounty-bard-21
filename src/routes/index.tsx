@@ -52,9 +52,10 @@ import {
   seedLogs,
   seedStats,
 } from "@/lib/bounty-mock";
-import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, Target } from "lucide-react";
+import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, Target, X } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
+import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
