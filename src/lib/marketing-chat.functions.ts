@@ -81,6 +81,7 @@ export const chatWithMarketingBot = createServerFn({ method: "POST" })
     const completed = progress?.completed_tasks ?? [];
     const pending = progress?.pending_tasks ?? [];
     const linkProg = progress?.link_progress ?? {};
+    const auditHistory = progress?.audit_history ?? [];
     const totalTasks = completed.length + pending.length;
     const progressBlock = progress
       ? `CURRENT EXECUTION STATE (this is the source of truth — DO NOT re-suggest things already done):
