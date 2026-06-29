@@ -52,10 +52,12 @@ import {
   seedLogs,
   seedStats,
 } from "@/lib/bounty-mock";
-import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, Target, X } from "lucide-react";
+import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RotateCcw, Save, Target, X } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
 import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
+import { usePersistedState, clearPersisted } from "@/lib/persist";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -94,12 +96,15 @@ const URGENCY_STYLES: Record<Lead["urgency"], string> = {
 };
 
 function Dashboard() {
-  const [automation, setAutomation] = useState(true);
-  const [autoPilot, setAutoPilot] = useState(false);
-  const [leads, setLeads] = useState<Lead[]>(seedLeads);
-  const [selectedId, setSelectedId] = useState<string>(seedLeads[0].id);
-  const [logs, setLogs] = useState<LogEntry[]>(seedLogs);
-  const [stats, setStats] = useState(seedStats);
+  const [automation, setAutomation] = usePersistedState("automation", true);
+  const [autoPilot, setAutoPilot] = usePersistedState("autoPilot", false);
+  const [leads, setLeads] = usePersistedState<Lead[]>("leads", seedLeads);
+  const [selectedId, setSelectedId] = usePersistedState<string>(
+    "selectedLeadId",
+    seedLeads[0].id,
+  );
+  const [logs, setLogs] = usePersistedState<LogEntry[]>("logs", seedLogs);
+  const [stats, setStats] = usePersistedState("stats", seedStats);
   const [tick, setTick] = useState(0);
 
   const selected = useMemo(
@@ -127,7 +132,7 @@ function Dashboard() {
       setStats((s) => ({ ...s, scanned: s.scanned + Math.floor(Math.random() * 3) + 1 }));
     }, 2200);
     return () => window.clearInterval(id);
-  }, [automation]);
+  }, [automation, setLogs, setStats]);
 
   const handleSendPitch = (lead: Lead) => {
     setLeads((prev) =>
@@ -144,6 +149,22 @@ function Dashboard() {
       description: `${lead.source} • $${lead.budget.toLocaleString()} • ${lead.urgency}`,
     });
   };
+
+  const handleResetAll = () => {
+    setStats({ scanned: 0, pitches: 0, conversions: 0, earned: 0 });
+    setLogs([
+      {
+        t: new Date().toTimeString().slice(0, 5),
+        level: "ok",
+        msg: "Counters reset to zero — fresh start.",
+      },
+    ]);
+    setLeads((prev) => prev.map((l) => ({ ...l, status: "new" as const })));
+    toast.success("All numbers reset to 0", {
+      description: "Profile links & marketing plan kept. Tracking starts from now.",
+    });
+  };
+
 
   return (
     <div className="min-h-screen text-foreground">
@@ -166,8 +187,10 @@ function Dashboard() {
               setAutomation={setAutomation}
               stats={stats}
               logs={logs}
+              onReset={handleResetAll}
             />
           </TabsContent>
+
 
           <TabsContent value="portfolio" className="mt-0">
             <PortfolioTab />
@@ -281,12 +304,15 @@ function MonitorTab({
   setAutomation,
   stats,
   logs,
+  onReset,
 }: {
   automation: boolean;
   setAutomation: (v: boolean) => void;
   stats: typeof seedStats;
   logs: LogEntry[];
+  onReset: () => void;
 }) {
+
   return (
     <div className="grid gap-6">
       {/* Hero / automation toggle */}
@@ -313,20 +339,30 @@ function MonitorTab({
             </p>
           </div>
 
-          <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-elevated px-5 py-4">
-            <div className="text-right">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Automation
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={onReset}
+              className="border-border bg-surface text-foreground/80 hover:bg-surface-elevated"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" /> Reset numbers to 0
+            </Button>
+            <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-elevated px-5 py-4">
+              <div className="text-right">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Automation
+                </div>
+                <div className={`text-sm font-bold ${automation ? "text-neon" : "text-muted-foreground"}`}>
+                  {automation ? "ON" : "OFF"}
+                </div>
               </div>
-              <div className={`text-sm font-bold ${automation ? "text-neon" : "text-muted-foreground"}`}>
-                {automation ? "ON" : "OFF"}
-              </div>
+              <Switch
+                checked={automation}
+                onCheckedChange={setAutomation}
+                className="data-[state=checked]:bg-neon"
+              />
             </div>
-            <Switch
-              checked={automation}
-              onCheckedChange={setAutomation}
-              className="data-[state=checked]:bg-neon"
-            />
+
           </div>
         </div>
       </div>
@@ -454,16 +490,18 @@ function MetricCard({
 /* ---------------- Portfolio Tab ---------------- */
 
 function PortfolioTab() {
-  const [name, setName] = useState(developerProfile.name);
-  const [role, setRole] = useState(developerProfile.role);
-  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
-  const [facebook, setFacebook] = useState(developerProfile.facebook);
-  const [stack, setStack] = useState(
+  const [name, setName] = usePersistedState("profile.name", developerProfile.name);
+  const [role, setRole] = usePersistedState("profile.role", developerProfile.role);
+  const [linkedin, setLinkedin] = usePersistedState("profile.linkedin", developerProfile.linkedin);
+  const [facebook, setFacebook] = usePersistedState("profile.facebook", developerProfile.facebook);
+  const [stack, setStack] = usePersistedState(
+    "profile.stack",
     portfolioRepos
       .map((r, i) => `${i + 1}. ${r.name} — ${r.tagline}\n   stack: ${r.stack}`)
       .join("\n"),
   );
-  const [prompt, setPrompt] = useState(
+  const [prompt, setPrompt] = usePersistedState(
+    "profile.systemPrompt",
     `You are an autonomous pitcher writing on behalf of {{name}} ({{role}}).
 
 Voice:
@@ -472,6 +510,7 @@ Voice:
 
 Rules:
 - Open with the SPECIFIC pain in the post (one sentence).
+
 - Then map ONE relevant GitHub repo from the portfolio to the problem (use repo name).
 - Propose concrete deliverable + realistic timeline.
 - State a fixed price anchored to the listed budget.
@@ -941,17 +980,20 @@ function WebhookField() {
 
 function MarketingBotTab() {
   const run = useServerFn(generateMarketingPlan);
-  const [facebook, setFacebook] = useState(developerProfile.facebook);
-  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
-  const [fiverr, setFiverr] = useState("https://www.fiverr.com/");
-  const [github, setGithub] = useState("https://github.com/bahdan-los");
-  const [other, setOther] = useState("");
-  const [goals, setGoals] = useState(
+  const [facebook, setFacebook] = usePersistedState("bot.facebook", developerProfile.facebook);
+  const [linkedin, setLinkedin] = usePersistedState("bot.linkedin", developerProfile.linkedin);
+  const [fiverr, setFiverr] = usePersistedState("bot.fiverr", "https://www.fiverr.com/");
+  const [github, setGithub] = usePersistedState("bot.github", "https://github.com/bahdan-los");
+  const [other, setOther] = usePersistedState("bot.other", "");
+  const [goals, setGoals] = usePersistedState(
+    "bot.goals",
     "Land 3–5 paid web-dev / AI-automation gigs in the next 14 days. Target $300–$1500 per project. Build inbound flow from LinkedIn + Fiverr.",
   );
   const [loading, setLoading] = useState(false);
-  const [plan, setPlan] = useState<MarketingPlan | null>(null);
+  const [plan, setPlan] = usePersistedState<MarketingPlan | null>("bot.plan", null);
+  const [planGeneratedAt, setPlanGeneratedAt] = usePersistedState<string | null>("bot.planGeneratedAt", null);
   const [error, setError] = useState<string | null>(null);
+
 
   const portfolioText = useMemo(
     () =>
@@ -973,9 +1015,11 @@ function MarketingBotTab() {
         },
       });
       setPlan(res.plan);
-      toast.success("Plan generated", {
-        description: "Daily actions, post drafts and income forecast ready.",
+      setPlanGeneratedAt(new Date().toISOString());
+      toast.success("Plan generated & saved", {
+        description: "Your plan is remembered — close the tab and come back any time.",
       });
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Generation failed";
       setError(msg);
@@ -1009,22 +1053,51 @@ function MarketingBotTab() {
               copy, builds a 7-day action plan and projects expected income (low / high).
             </p>
           </div>
-          <Button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="bg-neon text-neon-foreground neon-glow hover:bg-neon/90"
-            size="lg"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" /> Generate full plan
-              </>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              onClick={handleGenerate}
+              disabled={loading}
+              className="bg-neon text-neon-foreground neon-glow hover:bg-neon/90"
+              size="lg"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" /> {plan ? "Regenerate plan" : "Generate full plan"}
+                </>
+              )}
+            </Button>
+            {planGeneratedAt && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Save className="h-3 w-3 text-neon" />
+                <span>
+                  Saved locally · last run{" "}
+                  <span className="font-mono text-foreground/80">
+                    {new Date(planGeneratedAt).toLocaleString()}
+                  </span>
+                </span>
+              </div>
             )}
-          </Button>
+            {plan && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPlan(null);
+                  setPlanGeneratedAt(null);
+                  clearPersisted("bot.plan");
+                  clearPersisted("bot.planGeneratedAt");
+                  toast("Saved plan cleared");
+                }}
+                className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Clear saved plan
+              </button>
+            )}
+          </div>
+
         </div>
       </div>
 

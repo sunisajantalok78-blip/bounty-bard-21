@@ -120,24 +120,17 @@ export const seedLeads: Lead[] = [
 ];
 
 export const seedLogs = [
-  { t: "12:51", level: "info" as const, msg: "Algora webhook: $350 Thai-legal OCR bounty matched SiamCheck AI" },
-  { t: "12:50", level: "ok" as const, msg: "AI pitch generated for ld_001 (confidence 96%)" },
-  { t: "12:48", level: "warn" as const, msg: "LinkedIn lead extracted — CRITICAL, $600 onboarding automation" },
-  { t: "12:45", level: "ok" as const, msg: "SmartQuote AI matched to ld_002 (Make/n8n stack)" },
-  { t: "12:42", level: "info" as const, msg: "Facebook Bangkok F&B group scan: 1 restaurant lead found" },
-  { t: "12:38", level: "info" as const, msg: "Repo matcher: Interactive Smart Restaurant Menu → ld_003" },
-  { t: "12:30", level: "ok" as const, msg: "LinkedIn lead ld_004 matched v0-half-life-3d-shooter engine" },
-  { t: "12:24", level: "info" as const, msg: "n8n flow #07 triggered: enrich → score → route" },
-  { t: "12:18", level: "info" as const, msg: "Portfolio index rebuilt (9 repos, 42 keywords)" },
-  { t: "12:05", level: "ok" as const, msg: "System health: all 4 integrations green" },
+  { t: "00:00", level: "info" as const, msg: "System initialised — counters reset to zero." },
+  { t: "00:00", level: "ok" as const, msg: "Profile links & marketing plan will be remembered locally." },
 ];
 
 export const seedStats = {
-  scanned: 1284,
-  pitches: 73,
-  conversions: 11,
-  earned: 18450,
+  scanned: 0,
+  pitches: 0,
+  conversions: 0,
+  earned: 0,
 };
+
 
 export const developerProfile = {
   name: "Bahdan Los",
