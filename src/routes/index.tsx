@@ -1571,6 +1571,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 function ChatLauncher({
   plan,
   profile,
+  progress,
 }: {
   plan: MarketingPlan;
   profile: {
@@ -1579,6 +1580,12 @@ function ChatLauncher({
     links: Record<string, string>;
     portfolio: string;
     goals: string;
+  };
+  progress?: {
+    completed_tasks: Array<{ day: string; task: string; done_at: string }>;
+    pending_tasks: Array<{ day: string; task: string }>;
+    link_progress: Record<string, { last_checked_at: string; summary: string }>;
+    notes: string;
   };
 }) {
   const [open, setOpen] = useState(false);
