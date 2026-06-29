@@ -186,6 +186,10 @@ function Dashboard() {
             />
           </TabsContent>
 
+          <TabsContent value="bot" className="mt-0">
+            <MarketingBotTab />
+          </TabsContent>
+
           <TabsContent value="payouts" className="mt-0">
             <PayoutsTab stats={stats} />
           </TabsContent>
