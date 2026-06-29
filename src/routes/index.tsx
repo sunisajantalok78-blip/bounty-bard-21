@@ -1053,22 +1053,51 @@ function MarketingBotTab() {
               copy, builds a 7-day action plan and projects expected income (low / high).
             </p>
           </div>
-          <Button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="bg-neon text-neon-foreground neon-glow hover:bg-neon/90"
-            size="lg"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" /> Generate full plan
-              </>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              onClick={handleGenerate}
+              disabled={loading}
+              className="bg-neon text-neon-foreground neon-glow hover:bg-neon/90"
+              size="lg"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" /> {plan ? "Regenerate plan" : "Generate full plan"}
+                </>
+              )}
+            </Button>
+            {planGeneratedAt && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Save className="h-3 w-3 text-neon" />
+                <span>
+                  Saved locally · last run{" "}
+                  <span className="font-mono text-foreground/80">
+                    {new Date(planGeneratedAt).toLocaleString()}
+                  </span>
+                </span>
+              </div>
             )}
-          </Button>
+            {plan && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPlan(null);
+                  setPlanGeneratedAt(null);
+                  clearPersisted("bot.plan");
+                  clearPersisted("bot.planGeneratedAt");
+                  toast("Saved plan cleared");
+                }}
+                className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Clear saved plan
+              </button>
+            )}
+          </div>
+
         </div>
       </div>
 
