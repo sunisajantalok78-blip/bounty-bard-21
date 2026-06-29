@@ -77,7 +77,7 @@ export const Route = createFileRoute("/")({
     scripts: [
       {
         src: "https://cloud.umami.is/script.js",
-        "data-website-id": "30ef8190-8bb0-49a7-b46a-aac210415fe1",
+        "data-website-id": "fa1cc7b9-1012-48bf-9b7e-c98fc350fc9f",
         defer: true,
       },
     ],
