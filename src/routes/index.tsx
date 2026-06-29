@@ -1395,6 +1395,7 @@ Respond with a tight progress report in this exact markdown layout:
                       portfolio: portfolioText,
                       goals,
                     }}
+                    progress={progressPayload}
                   />
                   <div className="mt-4 grid gap-3">
                     {plan.profile_audit.map((a, i) => (
