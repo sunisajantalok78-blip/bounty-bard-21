@@ -136,4 +136,4 @@ export type MarketingPlan = {
     assumptions?: string[];
   };
   next_milestones?: Array<{ when?: string; milestone?: string; expected_usd?: number }>;
-  });
+};
