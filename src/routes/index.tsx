@@ -1210,18 +1210,136 @@ Respond with a tight progress report in this exact markdown layout:
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        <SectionCard icon={Target} title="Profile links to analyze" subtitle="Paste every public profile the bot should audit.">
+        <div className="grid gap-6">
+        <SectionCard
+          icon={Target}
+          title="Profile links to analyze"
+          subtitle="Paste each public profile, then hit Update after acting on the AI's advice."
+        >
           <div className="grid gap-3">
-            <Field label="LinkedIn"><Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." /></Field>
-            <Field label="Facebook"><Input value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="https://facebook.com/..." /></Field>
-            <Field label="Fiverr gig / profile"><Input value={fiverr} onChange={(e) => setFiverr(e.target.value)} placeholder="https://fiverr.com/..." /></Field>
-            <Field label="GitHub"><Input value={github} onChange={(e) => setGithub(e.target.value)} placeholder="https://github.com/..." /></Field>
-            <Field label="Other (Upwork / X / IG / site)"><Input value={other} onChange={(e) => setOther(e.target.value)} placeholder="https://..." /></Field>
+            <LinkRow
+              label="LinkedIn"
+              value={linkedin}
+              onChange={setLinkedin}
+              placeholder="https://linkedin.com/in/..."
+              checking={checkingPlatform === "LinkedIn"}
+              progress={linkProgress["LinkedIn"]}
+              onCheck={() => recheckLink("LinkedIn", linkedin)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="Facebook"
+              value={facebook}
+              onChange={setFacebook}
+              placeholder="https://facebook.com/..."
+              checking={checkingPlatform === "Facebook"}
+              progress={linkProgress["Facebook"]}
+              onCheck={() => recheckLink("Facebook", facebook)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="Fiverr gig / profile"
+              value={fiverr}
+              onChange={setFiverr}
+              placeholder="https://fiverr.com/..."
+              checking={checkingPlatform === "Fiverr"}
+              progress={linkProgress["Fiverr"]}
+              onCheck={() => recheckLink("Fiverr", fiverr)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="GitHub"
+              value={github}
+              onChange={setGithub}
+              placeholder="https://github.com/..."
+              checking={checkingPlatform === "GitHub"}
+              progress={linkProgress["GitHub"]}
+              onCheck={() => recheckLink("GitHub", github)}
+              disabledRecheck={!plan}
+            />
+            <LinkRow
+              label="Other (Upwork / X / IG / site)"
+              value={other}
+              onChange={setOther}
+              placeholder="https://..."
+              checking={checkingPlatform === "Other"}
+              progress={linkProgress["Other"]}
+              onCheck={() => recheckLink("Other", other)}
+              disabledRecheck={!plan}
+            />
             <Field label="Goals for the bot">
               <Textarea value={goals} onChange={(e) => setGoals(e.target.value)} rows={4} className="resize-none text-sm" />
             </Field>
+            {!plan && (
+              <p className="text-[11px] text-muted-foreground">
+                Generate a plan first — then the per-profile <span className="text-neon">Update</span> buttons unlock and
+                start tracking progress over time.
+              </p>
+            )}
           </div>
         </SectionCard>
+
+        <SectionCard
+          icon={CheckCircle2}
+          title="Business state & task tracker"
+          subtitle="The AI uses this as memory — it knows what's already done."
+          right={
+            <Badge variant="outline" className="border-neon/30 bg-neon/10 text-neon">
+              {completedTasks.length} / {allTasks.length || 0} done
+            </Badge>
+          }
+        >
+          {allTasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Tasks will appear here as soon as you generate a plan.
+            </p>
+          ) : (
+            <>
+              <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                <div
+                  className="h-full bg-neon transition-all"
+                  style={{
+                    width: `${allTasks.length ? Math.round((completedTasks.length / allTasks.length) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Tick off tasks as you complete them. Re-checks and the AI Coach will skip anything already done.
+              </p>
+            </>
+          )}
+          <div className="mt-3">
+            <Field label="Notes about current business state (optional)">
+              <Textarea
+                value={progressNotes}
+                onChange={(e) => setProgressNotes(e.target.value)}
+                rows={3}
+                placeholder="e.g. 2 inbound leads this week, posted on LinkedIn Mon+Wed, Fiverr gig live but 0 orders…"
+                className="resize-none text-sm"
+              />
+            </Field>
+          </div>
+          {(completedTasks.length > 0 || Object.keys(linkProgress).length > 0) && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!confirm("Reset all task completions and per-profile re-check history?")) return;
+                setTaskState({});
+                setLinkProgress({});
+                setProgressNotes("");
+                clearPersisted("bot.taskState");
+                clearPersisted("bot.linkProgress");
+                clearPersisted("bot.progressNotes");
+                toast("Progress reset");
+              }}
+              className="mt-3 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Reset progress history
+            </button>
+          )}
+        </SectionCard>
+        </div>
+
 
         <div className="grid gap-6">
           {error && (
