@@ -1444,17 +1444,44 @@ Respond with a tight progress report in this exact markdown layout:
 
               {!!plan.profile_audit?.length && (
                 <SectionCard icon={Target} title="Profile audit">
-                  <ChatLauncher
-                    plan={plan}
-                    profile={{
-                      name: developerProfile.name,
-                      role: developerProfile.role,
-                      links: { facebook, linkedin, fiverr, github, other },
-                      portfolio: portfolioText,
-                      goals,
-                    }}
-                    progress={progressPayload}
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ChatLauncher
+                      plan={plan}
+                      profile={{
+                        name: developerProfile.name,
+                        role: developerProfile.role,
+                        links: { facebook, linkedin, fiverr, github, other },
+                        portfolio: portfolioText,
+                        goals,
+                      }}
+                      progress={progressPayload}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={auditRefreshing}
+                      onClick={() => runAuditRefresh()}
+                      className="h-8 border-neon/40 text-neon hover:bg-neon/10"
+                    >
+                      {auditRefreshing ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Refreshing…
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Refresh audit
+                        </>
+                      )}
+                    </Button>
+                    {auditRefreshedAt && (
+                      <span className="text-[11px] text-muted-foreground">
+                        updated {new Date(auditRefreshedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Auto-refreshes ~1.5s after you tick a task complete — scores rise and "fix now" items drop as you execute.
+                  </p>
                   <div className="mt-4 grid gap-3">
                     {plan.profile_audit.map((a, i) => (
                       <div key={i} className="rounded-xl border border-border bg-surface/60 p-4">
