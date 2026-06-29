@@ -1618,6 +1618,7 @@ function ChatLauncher({
           messages: next,
           plan: plan as unknown,
           profile,
+          progress,
         },
       });
       setMessages((m) => [...m, { role: "assistant", content: res.text }]);
