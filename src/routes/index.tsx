@@ -1013,6 +1013,104 @@ function MarketingBotTab() {
     [],
   );
 
+  // Flatten plan tasks → stable IDs for the completion tracker.
+  const allTasks = useMemo(() => {
+    const out: Array<{ id: string; day: string; task: string }> = [];
+    plan?.daily_actions?.forEach((d, i) => {
+      d.tasks?.forEach((t, j) => {
+        out.push({ id: `d${i}-t${j}`, day: d.day || `Day ${i + 1}`, task: t.task || "" });
+      });
+    });
+    return out;
+  }, [plan]);
+
+  const completedTasks = useMemo(
+    () =>
+      allTasks
+        .filter((t) => taskState[t.id]?.done)
+        .map((t) => ({ day: t.day, task: t.task, done_at: taskState[t.id]?.doneAt || "" })),
+    [allTasks, taskState],
+  );
+  const pendingTasks = useMemo(
+    () =>
+      allTasks
+        .filter((t) => !taskState[t.id]?.done)
+        .map((t) => ({ day: t.day, task: t.task })),
+    [allTasks, taskState],
+  );
+
+  const progressPayload = {
+    completed_tasks: completedTasks,
+    pending_tasks: pendingTasks,
+    link_progress: Object.fromEntries(
+      Object.entries(linkProgress).map(([k, v]) => [
+        k,
+        { last_checked_at: v.lastCheckedAt, summary: v.summary },
+      ]),
+    ),
+    notes: progressNotes,
+  };
+
+  const toggleTask = (id: string) =>
+    setTaskState((s) => {
+      const cur = s[id];
+      if (cur?.done) {
+        const { [id]: _omit, ...rest } = s;
+        return rest;
+      }
+      return { ...s, [id]: { done: true, doneAt: new Date().toISOString() } };
+    });
+
+  const recheckLink = async (platform: string, url: string) => {
+    if (!url.trim()) {
+      toast.error("Add a URL first", { description: `Paste your ${platform} link before re-checking.` });
+      return;
+    }
+    setCheckingPlatform(platform);
+    try {
+      const prev = linkProgress[platform];
+      const prompt = `RE-CHECK my ${platform} profile: ${url}
+
+Previous re-check (${prev?.lastCheckedAt ? new Date(prev.lastCheckedAt).toLocaleString() : "none yet"}):
+${prev?.summary || "(no prior re-check on this profile)"}
+
+Use the "CURRENT EXECUTION STATE" you already have (completed tasks, pending tasks, other profile re-checks) to assess where THIS profile stands NOW.
+
+Respond with a tight progress report in this exact markdown layout:
+
+**Status:** <one line: improving / stalled / regressing>
+**New score:** <0-100> (previous: ${prev ? "see above" : "n/a"})
+**What changed since last check:** <bullets>
+**Top 3 highest-leverage fixes RIGHT NOW for this profile:** <numbered, each <= 20 words, concrete>
+**Next 24h action:** <one specific task, time-boxed>
+**Follow-up question for me:** <one sharp question>`;
+
+      const res = await recheckFn({
+        data: {
+          messages: [{ role: "user", content: prompt }],
+          plan: plan as unknown,
+          profile: {
+            name: developerProfile.name,
+            role: developerProfile.role,
+            links: { facebook, linkedin, fiverr, github, other },
+            portfolio: portfolioText,
+            goals,
+          },
+          progress: progressPayload,
+        },
+      });
+      setLinkProgress((s) => ({
+        ...s,
+        [platform]: { lastCheckedAt: new Date().toISOString(), summary: res.text },
+      }));
+      toast.success(`${platform} re-checked`, { description: "Progress saved — AI now remembers this state." });
+    } catch (e) {
+      toast.error("Re-check failed", { description: e instanceof Error ? e.message : "Unknown error" });
+    } finally {
+      setCheckingPlatform(null);
+    }
+  };
+
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
