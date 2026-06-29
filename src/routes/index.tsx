@@ -1695,6 +1695,28 @@ function BulletList({ title, items, tone }: { title: string; items?: string[]; t
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
+/** Pull actionable task lines out of an assistant markdown reply. */
+function extractTasks(text: string): string[] {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    // numbered: "1." "1)" / bullets: "-" "*" "•" / checkboxes: "- [ ]"
+    const m = line.match(/^(?:\d+[.)]|[-*•]|\[\s?\])\s+(.+)$/);
+    if (!m) continue;
+    let task = m[1].replace(/^\[\s?\]\s*/, "").trim();
+    // strip surrounding markdown emphasis
+    task = task.replace(/^\*\*(.+?)\*\*:?\s*/, "$1: ").trim();
+    if (task.length < 6 || task.length > 240) continue;
+    // skip pure headings / questions
+    if (/^[A-Z][A-Z\s]{4,}:?$/.test(task)) continue;
+    out.push(task);
+  }
+  // de-dupe, cap
+  return Array.from(new Set(out)).slice(0, 8);
+}
+
 function ChatLauncher({
   plan,
   profile,
