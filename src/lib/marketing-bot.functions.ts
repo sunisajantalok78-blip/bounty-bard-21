@@ -100,5 +100,5 @@ Now produce the JSON plan. Be specific (real timeframes, real $ figures, real po
       // non-fatal
     }
 
-    return plan as Record<string, unknown>;
+    return { plan: plan as unknown };
   });
