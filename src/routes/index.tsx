@@ -52,7 +52,7 @@ import {
   seedLogs,
   seedStats,
 } from "@/lib/bounty-mock";
-import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RotateCcw, Save, Target, X } from "lucide-react";
+import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RefreshCw, RotateCcw, Save, Square, Target, X } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
 import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
