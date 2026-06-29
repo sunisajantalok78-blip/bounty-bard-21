@@ -1067,6 +1067,58 @@ function MarketingBotTab() {
       return { ...s, [id]: { done: true, doneAt: new Date().toISOString() } };
     });
 
+  const runAuditRefresh = async (opts?: { silent?: boolean }) => {
+    if (!plan) return;
+    setAuditRefreshing(true);
+    try {
+      const res = await refreshAuditFn({
+        data: {
+          profileLinks: { facebook, linkedin, fiverr, github, other },
+          goals,
+          portfolio: portfolioText,
+          previousAudit: plan.profile_audit ?? [],
+          completedTasks,
+          pendingTasks,
+          notes: progressNotes,
+        },
+      });
+      setPlan((p) => (p ? { ...p, profile_audit: res.audit } : p));
+      setAuditRefreshedAt(new Date().toISOString());
+      if (!opts?.silent) {
+        toast.success("Profile audit refreshed", {
+          description: "Scores & fix-now items now reflect your completed tasks.",
+        });
+      }
+    } catch (e) {
+      if (!opts?.silent) {
+        toast.error("Audit refresh failed", {
+          description: e instanceof Error ? e.message : "Unknown error",
+        });
+      }
+    } finally {
+      setAuditRefreshing(false);
+    }
+  };
+
+  // Auto re-audit (debounced) whenever the set of completed tasks changes.
+  const completedCount = completedTasks.length;
+  const lastAuditedCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!plan) return;
+    if (lastAuditedCountRef.current === null) {
+      lastAuditedCountRef.current = completedCount;
+      return;
+    }
+    if (lastAuditedCountRef.current === completedCount) return;
+    const t = window.setTimeout(() => {
+      lastAuditedCountRef.current = completedCount;
+      void runAuditRefresh({ silent: true });
+    }, 1500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedCount, plan?.profile_audit ? "p" : "n"]);
+
+
   const recheckLink = async (platform: string, url: string) => {
     if (!url.trim()) {
       toast.error("Add a URL first", { description: `Paste your ${platform} link before re-checking.` });
