@@ -1037,18 +1037,26 @@ function MarketingBotTab() {
   }, [plan]);
 
   const completedTasks = useMemo(
-    () =>
-      allTasks
+    () => [
+      ...allTasks
         .filter((t) => taskState[t.id]?.done)
         .map((t) => ({ day: t.day, task: t.task, done_at: taskState[t.id]?.doneAt || "" })),
-    [allTasks, taskState],
+      ...chatTasks
+        .filter((t) => t.done)
+        .map((t) => ({ day: t.source || "AI Chat", task: t.task, done_at: t.doneAt || "" })),
+    ],
+    [allTasks, taskState, chatTasks],
   );
   const pendingTasks = useMemo(
-    () =>
-      allTasks
+    () => [
+      ...allTasks
         .filter((t) => !taskState[t.id]?.done)
         .map((t) => ({ day: t.day, task: t.task })),
-    [allTasks, taskState],
+      ...chatTasks
+        .filter((t) => !t.done)
+        .map((t) => ({ day: t.source || "AI Chat", task: t.task })),
+    ],
+    [allTasks, taskState, chatTasks],
   );
 
   const progressPayload = {
@@ -1061,6 +1069,27 @@ function MarketingBotTab() {
       ]),
     ),
     notes: progressNotes,
+    audit_history: auditHistory,
+  };
+
+  const addChatTask = (task: string) => {
+    const trimmed = task.trim();
+    if (!trimmed) return;
+    setChatTasks((prev) => {
+      if (prev.some((t) => t.task === trimmed)) return prev;
+      return [
+        ...prev,
+        {
+          id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          task: trimmed,
+          source: "AI Chat",
+          done: true,
+          doneAt: new Date().toISOString(),
+          addedAt: new Date().toISOString(),
+        },
+      ];
+    });
+    toast.success("Task marked complete", { description: trimmed.slice(0, 120) });
   };
 
   const toggleTask = (id: string) =>
