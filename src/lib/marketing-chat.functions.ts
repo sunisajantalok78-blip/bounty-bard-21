@@ -19,6 +19,40 @@ const Input = z.object({
       goals: z.string().optional().default(""),
     })
     .optional(),
+  progress: z
+    .object({
+      completed_tasks: z
+        .array(
+          z.object({
+            day: z.string().optional().default(""),
+            task: z.string(),
+            done_at: z.string().optional().default(""),
+          }),
+        )
+        .optional()
+        .default([]),
+      pending_tasks: z
+        .array(
+          z.object({
+            day: z.string().optional().default(""),
+            task: z.string(),
+          }),
+        )
+        .optional()
+        .default([]),
+      link_progress: z
+        .record(
+          z.string(),
+          z.object({
+            last_checked_at: z.string().optional().default(""),
+            summary: z.string().optional().default(""),
+          }),
+        )
+        .optional()
+        .default({}),
+      notes: z.string().optional().default(""),
+    })
+    .optional(),
 });
 
 export const chatWithMarketingBot = createServerFn({ method: "POST" })
