@@ -1000,6 +1000,12 @@ function MarketingBotTab() {
     Record<string, { lastCheckedAt: string; summary: string }>
   >("bot.linkProgress", {});
   const [progressNotes, setProgressNotes] = usePersistedState("bot.progressNotes", "");
+  const [auditHistory, setAuditHistory] = usePersistedState<
+    Array<{ at: string; audit: unknown }>
+  >("bot.auditHistory", []);
+  const [chatTasks, setChatTasks] = usePersistedState<
+    Array<{ id: string; task: string; source: string; done: boolean; doneAt?: string; addedAt: string }>
+  >("bot.chatTasks", []);
   const [checkingPlatform, setCheckingPlatform] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [auditRefreshing, setAuditRefreshing] = useState(false);
@@ -1031,18 +1037,26 @@ function MarketingBotTab() {
   }, [plan]);
 
   const completedTasks = useMemo(
-    () =>
-      allTasks
+    () => [
+      ...allTasks
         .filter((t) => taskState[t.id]?.done)
         .map((t) => ({ day: t.day, task: t.task, done_at: taskState[t.id]?.doneAt || "" })),
-    [allTasks, taskState],
+      ...chatTasks
+        .filter((t) => t.done)
+        .map((t) => ({ day: t.source || "AI Chat", task: t.task, done_at: t.doneAt || "" })),
+    ],
+    [allTasks, taskState, chatTasks],
   );
   const pendingTasks = useMemo(
-    () =>
-      allTasks
+    () => [
+      ...allTasks
         .filter((t) => !taskState[t.id]?.done)
         .map((t) => ({ day: t.day, task: t.task })),
-    [allTasks, taskState],
+      ...chatTasks
+        .filter((t) => !t.done)
+        .map((t) => ({ day: t.source || "AI Chat", task: t.task })),
+    ],
+    [allTasks, taskState, chatTasks],
   );
 
   const progressPayload = {
@@ -1055,6 +1069,27 @@ function MarketingBotTab() {
       ]),
     ),
     notes: progressNotes,
+    audit_history: auditHistory,
+  };
+
+  const addChatTask = (task: string) => {
+    const trimmed = task.trim();
+    if (!trimmed) return;
+    setChatTasks((prev) => {
+      if (prev.some((t) => t.task === trimmed)) return prev;
+      return [
+        ...prev,
+        {
+          id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          task: trimmed,
+          source: "AI Chat",
+          done: true,
+          doneAt: new Date().toISOString(),
+          addedAt: new Date().toISOString(),
+        },
+      ];
+    });
+    toast.success("Task marked complete", { description: trimmed.slice(0, 120) });
   };
 
   const toggleTask = (id: string) =>
@@ -1083,7 +1118,9 @@ function MarketingBotTab() {
         },
       });
       setPlan((p) => (p ? { ...p, profile_audit: res.audit } : p));
-      setAuditRefreshedAt(new Date().toISOString());
+      const now = new Date().toISOString();
+      setAuditHistory((h) => [...h, { at: now, audit: res.audit }].slice(-20));
+      setAuditRefreshedAt(now);
       if (!opts?.silent) {
         toast.success("Profile audit refreshed", {
           description: "Scores & fix-now items now reflect your completed tasks.",
@@ -1181,7 +1218,11 @@ Respond with a tight progress report in this exact markdown layout:
         },
       });
       setPlan(res.plan);
-      setPlanGeneratedAt(new Date().toISOString());
+      const now = new Date().toISOString();
+      setPlanGeneratedAt(now);
+      if (res.plan?.profile_audit?.length) {
+        setAuditHistory((h) => [...h, { at: now, audit: res.plan.profile_audit }].slice(-20));
+      }
       toast.success("Plan generated & saved", {
         description: "Your plan is remembered — close the tab and come back any time.",
       });
@@ -1455,6 +1496,7 @@ Respond with a tight progress report in this exact markdown layout:
                         goals,
                       }}
                       progress={progressPayload}
+                      onCompleteTask={addChatTask}
                     />
                     <Button
                       size="sm"
@@ -1653,10 +1695,33 @@ function BulletList({ title, items, tone }: { title: string; items?: string[]; t
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
+/** Pull actionable task lines out of an assistant markdown reply. */
+function extractTasks(text: string): string[] {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    // numbered: "1." "1)" / bullets: "-" "*" "•" / checkboxes: "- [ ]"
+    const m = line.match(/^(?:\d+[.)]|[-*•]|\[\s?\])\s+(.+)$/);
+    if (!m) continue;
+    let task = m[1].replace(/^\[\s?\]\s*/, "").trim();
+    // strip surrounding markdown emphasis
+    task = task.replace(/^\*\*(.+?)\*\*:?\s*/, "$1: ").trim();
+    if (task.length < 6 || task.length > 240) continue;
+    // skip pure headings / questions
+    if (/^[A-Z][A-Z\s]{4,}:?$/.test(task)) continue;
+    out.push(task);
+  }
+  // de-dupe, cap
+  return Array.from(new Set(out)).slice(0, 8);
+}
+
 function ChatLauncher({
   plan,
   profile,
   progress,
+  onCompleteTask,
 }: {
   plan: MarketingPlan;
   profile: {
@@ -1671,17 +1736,27 @@ function ChatLauncher({
     pending_tasks: Array<{ day: string; task: string }>;
     link_progress: Record<string, { last_checked_at: string; summary: string }>;
     notes: string;
+    audit_history?: Array<{ at: string; audit: unknown }>;
   };
+  onCompleteTask?: (task: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const send = useServerFn(chatWithMarketingBot);
-  const [messages, setMessages] = useState<ChatMsg[]>([
+  const initialMessages: ChatMsg[] = [
     {
       role: "assistant",
       content:
-        "Hi — I'm your marketing coach. I have your full plan in context. Ask me anything (e.g. *\"walk me through Day 1 step by step\"*, *\"write the first LinkedIn post for me\"*, *\"what should I do RIGHT NOW?\"*).\n\nWhat's the very first thing you want to tackle?",
+        "Hi — I'm your marketing coach. I remember our previous chats, your profile audit history, and every task you've ticked off. Ask me anything (e.g. *\"walk me through Day 1\"*, *\"how have my profiles improved?\"*, *\"what should I do RIGHT NOW?\"*).\n\nAny task I suggest will have a **✓ Mark complete** button — tap it and I'll remember it next time.",
     },
-  ]);
+  ];
+  const [messages, setMessages] = usePersistedState<ChatMsg[]>(
+    "bot.chatMessages",
+    initialMessages,
+  );
+  const [completedFromChat, setCompletedFromChat] = usePersistedState<Record<string, true>>(
+    "bot.chatCompletedKeys",
+    {},
+  );
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1689,6 +1764,16 @@ function ChatLauncher({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  const clearChat = () => {
+    setMessages(initialMessages);
+    setCompletedFromChat({});
+  };
+
+  const markDone = (key: string, task: string) => {
+    setCompletedFromChat((s) => ({ ...s, [key]: true }));
+    onCompleteTask?.(task);
+  };
 
   const ask = async (text: string) => {
     const q = text.trim();
@@ -1742,31 +1827,82 @@ function ChatLauncher({
               </div>
               <div>
                 <div className="text-sm font-semibold">AI Marketing Coach</div>
-                <div className="text-[11px] text-muted-foreground">Has your full plan + profile in context</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Remembers chat history, audits & completed tasks
+                </div>
               </div>
             </div>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={clearChat}
+                title="Clear chat history"
+              >
+                Clear
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div ref={scrollRef} className="max-h-[420px] space-y-3 overflow-y-auto p-4">
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                    m.role === "user"
-                      ? "bg-neon text-neon-foreground"
-                      : "border border-border/60 bg-surface text-foreground/95"
-                  }`}
-                >
-                  {m.content}
+            {messages.map((m, i) => {
+              const tasks = m.role === "assistant" ? extractTasks(m.content) : [];
+              return (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "bg-neon text-neon-foreground"
+                        : "border border-border/60 bg-surface text-foreground/95"
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap">{m.content}</div>
+                    {tasks.length > 0 && (
+                      <div className="mt-3 space-y-1.5 border-t border-border/40 pt-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-neon">
+                          Actionable tasks
+                        </div>
+                        {tasks.map((t, j) => {
+                          const key = `${i}:${j}:${t.slice(0, 60)}`;
+                          const done = !!completedFromChat[key];
+                          return (
+                            <div key={key} className="flex items-start gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={done}
+                                onClick={() => markDone(key, t)}
+                                className={`h-6 shrink-0 px-2 text-[10px] ${
+                                  done
+                                    ? "border-neon/30 bg-neon/10 text-neon"
+                                    : "border-neon/40 text-neon hover:bg-neon/10"
+                                }`}
+                              >
+                                {done ? (
+                                  <>
+                                    <Check className="mr-1 h-3 w-3" /> Done
+                                  </>
+                                ) : (
+                                  <>✓ Complete</>
+                                )}
+                              </Button>
+                              <div className={`text-xs ${done ? "text-muted-foreground line-through" : "text-foreground/90"}`}>
+                                {t}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {loading && (
               <div className="flex justify-start">
                 <div className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3.5 py-2.5 text-sm text-muted-foreground">

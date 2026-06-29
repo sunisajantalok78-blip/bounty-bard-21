@@ -51,6 +51,15 @@ const Input = z.object({
         .optional()
         .default({}),
       notes: z.string().optional().default(""),
+      audit_history: z
+        .array(
+          z.object({
+            at: z.string().optional().default(""),
+            audit: z.unknown(),
+          }),
+        )
+        .optional()
+        .default([]),
     })
     .optional(),
 });
@@ -72,6 +81,7 @@ export const chatWithMarketingBot = createServerFn({ method: "POST" })
     const completed = progress?.completed_tasks ?? [];
     const pending = progress?.pending_tasks ?? [];
     const linkProg = progress?.link_progress ?? {};
+    const auditHistory = progress?.audit_history ?? [];
     const totalTasks = completed.length + pending.length;
     const progressBlock = progress
       ? `CURRENT EXECUTION STATE (this is the source of truth — DO NOT re-suggest things already done):
@@ -87,6 +97,18 @@ ${
         .map(([k, v]) => `  • ${k} (checked ${v.last_checked_at || "?"}): ${(v.summary || "").slice(0, 600)}`)
         .join("\n")
     : "  (no previous re-checks)"
+}
+- Profile audit HISTORY (chronological snapshots — use to track score changes over time):
+${
+  auditHistory.length
+    ? auditHistory
+        .slice(-6)
+        .map(
+          (h, i) =>
+            `  [${i + 1}] ${h.at || "?"}\n${JSON.stringify(h.audit).slice(0, 1500)}`,
+        )
+        .join("\n")
+    : "  (no audit history yet)"
 }
 - Free-form notes from operator: ${progress.notes || "(none)"}`
       : "CURRENT EXECUTION STATE: (no progress tracked yet)";
