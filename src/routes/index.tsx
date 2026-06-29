@@ -45,13 +45,16 @@ import { Toaster } from "@/components/ui/sonner";
 import {
   type Lead,
   MOCK_WEBHOOK_URL,
+  NOTIFY_EMAIL,
   developerProfile,
   portfolioRepos,
   seedLeads,
   seedLogs,
   seedStats,
 } from "@/lib/bounty-mock";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, Target } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -152,6 +155,7 @@ function Dashboard() {
             <TabTrigger value="monitor" icon={Gauge} label="System Monitor" />
             <TabTrigger value="portfolio" icon={Settings2} label="Portfolio & Context" />
             <TabTrigger value="inbox" icon={Inbox} label="Lead Inbox & AI Pitcher" />
+            <TabTrigger value="bot" icon={BrainCircuit} label="AI Marketing Bot" />
             <TabTrigger value="payouts" icon={Wallet} label="Payouts & Integrations" />
           </TabsList>
 
@@ -180,6 +184,10 @@ function Dashboard() {
                 setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, pitch } : l)))
               }
             />
+          </TabsContent>
+
+          <TabsContent value="bot" className="mt-0">
+            <MarketingBotTab />
           </TabsContent>
 
           <TabsContent value="payouts" className="mt-0">
@@ -927,4 +935,304 @@ function WebhookField() {
     </div>
   );
 }
+
+/* ---------------- AI Marketing Bot Tab ---------------- */
+
+function MarketingBotTab() {
+  const run = useServerFn(generateMarketingPlan);
+  const [facebook, setFacebook] = useState(developerProfile.facebook);
+  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
+  const [fiverr, setFiverr] = useState("https://www.fiverr.com/");
+  const [github, setGithub] = useState("https://github.com/bahdan-los");
+  const [other, setOther] = useState("");
+  const [goals, setGoals] = useState(
+    "Land 3–5 paid web-dev / AI-automation gigs in the next 14 days. Target $300–$1500 per project. Build inbound flow from LinkedIn + Fiverr.",
+  );
+  const [loading, setLoading] = useState(false);
+  const [plan, setPlan] = useState<MarketingPlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const portfolioText = useMemo(
+    () =>
+      portfolioRepos
+        .map((r) => `• ${r.name} — ${r.tagline} (${r.stack})`)
+        .join("\n"),
+    [],
+  );
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await run({
+        data: {
+          profileLinks: { facebook, linkedin, fiverr, github, other },
+          goals,
+          portfolio: portfolioText,
+        },
+      });
+      setPlan(res.plan);
+      toast.success("Plan generated", {
+        description: "Daily actions, post drafts and income forecast ready.",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Generation failed";
+      setError(msg);
+      toast.error("AI bot failed", { description: msg });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-6">
+      <div className="glass-panel relative overflow-hidden rounded-2xl p-6 md:p-8">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-60"
+          style={{
+            background:
+              "radial-gradient(600px 300px at 80% 20%, oklch(0.86 0.22 150 / 0.12), transparent 70%)",
+          }}
+        />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-xl">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-neon/30 bg-neon/10 px-3 py-1 text-xs font-medium text-neon">
+              <BrainCircuit className="h-3 w-3" />
+              Autonomous marketing strategist
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
+              Drop your profile links — I'll do the marketing for you.
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              The bot audits your FB / LinkedIn / Fiverr / GitHub presence, writes ready-to-post
+              copy, builds a 7-day action plan and projects expected income (low / high).
+            </p>
+          </div>
+          <Button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="bg-neon text-neon-foreground neon-glow hover:bg-neon/90"
+            size="lg"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" /> Generate full plan
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+        <SectionCard icon={Target} title="Profile links to analyze" subtitle="Paste every public profile the bot should audit.">
+          <div className="grid gap-3">
+            <Field label="LinkedIn"><Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." /></Field>
+            <Field label="Facebook"><Input value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="https://facebook.com/..." /></Field>
+            <Field label="Fiverr gig / profile"><Input value={fiverr} onChange={(e) => setFiverr(e.target.value)} placeholder="https://fiverr.com/..." /></Field>
+            <Field label="GitHub"><Input value={github} onChange={(e) => setGithub(e.target.value)} placeholder="https://github.com/..." /></Field>
+            <Field label="Other (Upwork / X / IG / site)"><Input value={other} onChange={(e) => setOther(e.target.value)} placeholder="https://..." /></Field>
+            <Field label="Goals for the bot">
+              <Textarea value={goals} onChange={(e) => setGoals(e.target.value)} rows={4} className="resize-none text-sm" />
+            </Field>
+          </div>
+        </SectionCard>
+
+        <div className="grid gap-6">
+          {error && (
+            <div className="glass-panel rounded-2xl border border-destructive/40 bg-destructive/5 p-5 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {!plan && !error && (
+            <div className="glass-panel grid place-items-center rounded-2xl p-12 text-center">
+              <BrainCircuit className="mb-3 h-10 w-10 text-neon/60" />
+              <h3 className="text-lg font-semibold">No plan generated yet</h3>
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                Fill the links on the left and hit <span className="text-neon">Generate full plan</span> —
+                the AI will return a 7-day action schedule, ready-to-publish post drafts, and a real income forecast.
+              </p>
+            </div>
+          )}
+
+          {plan && (
+            <>
+              {plan.summary && (
+                <SectionCard icon={Sparkles} title="Executive summary">
+                  <p className="text-sm leading-relaxed text-foreground/90">{plan.summary}</p>
+                </SectionCard>
+              )}
+
+              {plan.income_forecast && (
+                <SectionCard icon={LineChart} title="Income forecast (USD)" subtitle="Low / high range — assumes you execute the daily actions.">
+                  <div className="grid grid-cols-3 gap-3">
+                    <ForecastCell label="Week 1" low={plan.income_forecast.week_1_low_usd} high={plan.income_forecast.week_1_high_usd} />
+                    <ForecastCell label="Month 1" low={plan.income_forecast.month_1_low_usd} high={plan.income_forecast.month_1_high_usd} />
+                    <ForecastCell label="Quarter 1" low={plan.income_forecast.quarter_1_low_usd} high={plan.income_forecast.quarter_1_high_usd} />
+                  </div>
+                  {!!plan.income_forecast.assumptions?.length && (
+                    <ul className="mt-4 space-y-1 text-xs text-muted-foreground">
+                      {plan.income_forecast.assumptions.map((a, i) => (
+                        <li key={i}>• {a}</li>
+                      ))}
+                    </ul>
+                  )}
+                </SectionCard>
+              )}
+
+              {!!plan.profile_audit?.length && (
+                <SectionCard icon={Target} title="Profile audit">
+                  <div className="grid gap-3">
+                    {plan.profile_audit.map((a, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-surface/60 p-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="text-sm font-semibold">{a.platform}</div>
+                          {typeof a.score === "number" && (
+                            <Badge variant="outline" className="border-neon/30 bg-neon/10 text-neon">
+                              {a.score}/100
+                            </Badge>
+                          )}
+                        </div>
+                        {a.url && <div className="mb-2 truncate font-mono text-[11px] text-muted-foreground">{a.url}</div>}
+                        <BulletList title="Strengths" items={a.strengths} tone="ok" />
+                        <BulletList title="Weaknesses" items={a.weaknesses} tone="warn" />
+                        <BulletList title="Fix now" items={a.fix_now} tone="neon" />
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+
+              {!!plan.daily_actions?.length && (
+                <SectionCard icon={CalendarClock} title="Your 7-day action plan" subtitle="Exactly what to do and when.">
+                  <div className="grid gap-3">
+                    {plan.daily_actions.map((d, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-surface/60 p-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-neon">{d.day}</span>
+                          <span className="text-xs text-muted-foreground">{d.focus}</span>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {d.tasks?.map((t, j) => (
+                            <li key={j} className="grid grid-cols-[60px_1fr] gap-3 text-sm">
+                              <span className="font-mono text-xs text-muted-foreground">{t.time}</span>
+                              <div>
+                                <div className="font-medium">{t.task}</div>
+                                {t.why && <div className="text-xs text-muted-foreground">{t.why}</div>}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+
+              {!!plan.post_drafts?.length && (
+                <SectionCard icon={Sparkles} title="Ready-to-publish posts">
+                  <div className="grid gap-3">
+                    {plan.post_drafts.map((p, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-surface/60 p-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <Badge variant="outline" className="border-neon/30 bg-neon/10 text-neon">{p.platform}</Badge>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={async () => {
+                              const txt = `${p.hook}\n\n${p.body}\n\n${p.cta ?? ""}\n\n${(p.hashtags ?? []).join(" ")}`.trim();
+                              await navigator.clipboard.writeText(txt);
+                              toast.success("Post copied");
+                            }}
+                          >
+                            <Copy className="mr-1.5 h-3 w-3" /> Copy
+                          </Button>
+                        </div>
+                        {p.hook && <div className="text-sm font-semibold">{p.hook}</div>}
+                        {p.body && <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/90">{p.body}</p>}
+                        {p.cta && <p className="mt-2 text-sm font-medium text-neon">{p.cta}</p>}
+                        {!!p.hashtags?.length && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {p.hashtags.map((h, j) => (
+                              <span key={j} className="rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">{h}</span>
+                            ))}
+                          </div>
+                        )}
+                        {p.image_prompt && (
+                          <div className="mt-2 rounded border border-dashed border-border/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+                            <span className="font-semibold text-foreground/80">Image prompt:</span> {p.image_prompt}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+
+              {!!plan.next_milestones?.length && (
+                <SectionCard icon={Target} title="Next milestones & expected income">
+                  <ul className="divide-y divide-border/40">
+                    {plan.next_milestones.map((m, i) => (
+                      <li key={i} className="grid grid-cols-[110px_1fr_auto] items-center gap-3 py-2.5 text-sm">
+                        <span className="font-mono text-xs text-muted-foreground">{m.when}</span>
+                        <span>{m.milestone}</span>
+                        {typeof m.expected_usd === "number" && (
+                          <span className="font-mono font-bold text-neon">+${m.expected_usd.toLocaleString()}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </SectionCard>
+              )}
+            </>
+          )}
+
+          <div className="glass-panel rounded-2xl p-5">
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-neon/10 text-neon">
+                <Mail className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">Lead inquiries are emailed to</div>
+                <div className="truncate font-mono text-xs text-neon">{NOTIFY_EMAIL}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForecastCell({ label, low, high }: { label: string; low?: number; high?: number }) {
+  return (
+    <div className="rounded-xl border border-neon/20 bg-surface/60 p-4">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-lg font-bold text-neon">
+        ${(low ?? 0).toLocaleString()} – ${(high ?? 0).toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+function BulletList({ title, items, tone }: { title: string; items?: string[]; tone: "ok" | "warn" | "neon" }) {
+  if (!items?.length) return null;
+  const cls = tone === "ok" ? "text-neon" : tone === "warn" ? "text-warning" : "text-accent";
+  return (
+    <div className="mt-2">
+      <div className={`text-[10px] font-bold uppercase tracking-wider ${cls}`}>{title}</div>
+      <ul className="mt-1 space-y-0.5 text-xs text-foreground/85">
+        {items.map((s, i) => (
+          <li key={i}>• {s}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 

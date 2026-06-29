@@ -147,4 +147,6 @@ export const developerProfile = {
 };
 
 export const MOCK_WEBHOOK_URL =
-  "https://bounty-hunter-bahdan.b4a.run/api/v1/incoming-lead";
+  "https://project--e9580fa5-13a7-457e-975e-91b30a207a34.lovable.app/api/public/incoming-lead";
+
+export const NOTIFY_EMAIL = "sunisajantalok78@gmail.com";
