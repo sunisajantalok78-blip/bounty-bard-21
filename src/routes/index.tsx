@@ -1218,7 +1218,11 @@ Respond with a tight progress report in this exact markdown layout:
         },
       });
       setPlan(res.plan);
-      setPlanGeneratedAt(new Date().toISOString());
+      const now = new Date().toISOString();
+      setPlanGeneratedAt(now);
+      if (res.plan?.profile_audit?.length) {
+        setAuditHistory((h) => [...h, { at: now, audit: res.plan.profile_audit }].slice(-20));
+      }
       toast.success("Plan generated & saved", {
         description: "Your plan is remembered — close the tab and come back any time.",
       });
