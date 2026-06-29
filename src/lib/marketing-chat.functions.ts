@@ -98,6 +98,18 @@ ${
         .join("\n")
     : "  (no previous re-checks)"
 }
+- Profile audit HISTORY (chronological snapshots — use to track score changes over time):
+${
+  auditHistory.length
+    ? auditHistory
+        .slice(-6)
+        .map(
+          (h, i) =>
+            `  [${i + 1}] ${h.at || "?"}\n${JSON.stringify(h.audit).slice(0, 1500)}`,
+        )
+        .join("\n")
+    : "  (no audit history yet)"
+}
 - Free-form notes from operator: ${progress.notes || "(none)"}`
       : "CURRENT EXECUTION STATE: (no progress tracked yet)";
 
