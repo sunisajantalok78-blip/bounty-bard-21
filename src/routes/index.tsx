@@ -1496,6 +1496,7 @@ Respond with a tight progress report in this exact markdown layout:
                         goals,
                       }}
                       progress={progressPayload}
+                      onCompleteTask={addChatTask}
                     />
                     <Button
                       size="sm"
