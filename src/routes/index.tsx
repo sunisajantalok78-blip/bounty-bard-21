@@ -339,20 +339,30 @@ function MonitorTab({
             </p>
           </div>
 
-          <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-elevated px-5 py-4">
-            <div className="text-right">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Automation
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={onReset}
+              className="border-border bg-surface text-foreground/80 hover:bg-surface-elevated"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" /> Reset numbers to 0
+            </Button>
+            <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-elevated px-5 py-4">
+              <div className="text-right">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Automation
+                </div>
+                <div className={`text-sm font-bold ${automation ? "text-neon" : "text-muted-foreground"}`}>
+                  {automation ? "ON" : "OFF"}
+                </div>
               </div>
-              <div className={`text-sm font-bold ${automation ? "text-neon" : "text-muted-foreground"}`}>
-                {automation ? "ON" : "OFF"}
-              </div>
+              <Switch
+                checked={automation}
+                onCheckedChange={setAutomation}
+                className="data-[state=checked]:bg-neon"
+              />
             </div>
-            <Switch
-              checked={automation}
-              onCheckedChange={setAutomation}
-              className="data-[state=checked]:bg-neon"
-            />
+
           </div>
         </div>
       </div>
