@@ -1251,4 +1251,166 @@ function BulletList({ title, items, tone }: { title: string; items?: string[]; t
   );
 }
 
+/* ---------------- AI Chat Launcher (Profile audit) ---------------- */
+
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
+function ChatLauncher({
+  plan,
+  profile,
+}: {
+  plan: MarketingPlan;
+  profile: {
+    name: string;
+    role: string;
+    links: Record<string, string>;
+    portfolio: string;
+    goals: string;
+  };
+}) {
+  const [open, setOpen] = useState(false);
+  const send = useServerFn(chatWithMarketingBot);
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    {
+      role: "assistant",
+      content:
+        "Hi — I'm your marketing coach. I have your full plan in context. Ask me anything (e.g. *\"walk me through Day 1 step by step\"*, *\"write the first LinkedIn post for me\"*, *\"what should I do RIGHT NOW?\"*).\n\nWhat's the very first thing you want to tackle?",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
+
+  const ask = async (text: string) => {
+    const q = text.trim();
+    if (!q || loading) return;
+    const next: ChatMsg[] = [...messages, { role: "user", content: q }];
+    setMessages(next);
+    setInput("");
+    setLoading(true);
+    try {
+      const res = await send({
+        data: {
+          messages: next,
+          plan: plan as unknown,
+          profile,
+        },
+      });
+      setMessages((m) => [...m, { role: "assistant", content: res.text }]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Chat failed";
+      setMessages((m) => [...m, { role: "assistant", content: `⚠️ ${msg}` }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickPrompts = [
+    "What should I do RIGHT NOW (next 60 min)?",
+    "Walk me through Day 1 step by step.",
+    "Write the first LinkedIn post for me.",
+    "Which lead/profile fix has the highest ROI?",
+  ];
+
+  return (
+    <>
+      <Button
+        size="sm"
+        onClick={() => setOpen((v) => !v)}
+        className="h-8 bg-neon text-neon-foreground hover:bg-neon/90"
+      >
+        <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+        {open ? "Hide AI Coach" : "Ask AI Coach"}
+      </Button>
+
+      {open && (
+        <div className="col-span-full mt-4 overflow-hidden rounded-xl border border-neon/30 bg-surface/70">
+          <div className="flex items-center justify-between border-b border-border/60 bg-surface/80 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <div className="grid h-7 w-7 place-items-center rounded-md bg-neon/15 text-neon">
+                <BrainCircuit className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">AI Marketing Coach</div>
+                <div className="text-[11px] text-muted-foreground">Has your full plan + profile in context</div>
+              </div>
+            </div>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div ref={scrollRef} className="max-h-[420px] space-y-3 overflow-y-auto p-4">
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-neon text-neon-foreground"
+                      : "border border-border/60 bg-surface text-foreground/95"
+                  }`}
+                >
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3.5 py-2.5 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-neon" />
+                  Thinking…
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 border-t border-border/60 bg-surface/60 px-4 py-2">
+            {quickPrompts.map((q) => (
+              <button
+                key={q}
+                type="button"
+                disabled={loading}
+                onClick={() => ask(q)}
+                className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] text-foreground/80 transition hover:border-neon/40 hover:text-neon disabled:opacity-50"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              ask(input);
+            }}
+            className="flex items-center gap-2 border-t border-border/60 p-3"
+          >
+            <Input
+              autoFocus
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask anything about your plan, next steps, posts, income…"
+              disabled={loading}
+              className="h-10 flex-1 bg-surface/60 text-sm"
+            />
+            <Button
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="h-10 bg-neon text-neon-foreground hover:bg-neon/90"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </div>
+      )}
+    </>
+  );
+}
 
