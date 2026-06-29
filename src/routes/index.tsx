@@ -155,6 +155,7 @@ function Dashboard() {
             <TabTrigger value="monitor" icon={Gauge} label="System Monitor" />
             <TabTrigger value="portfolio" icon={Settings2} label="Portfolio & Context" />
             <TabTrigger value="inbox" icon={Inbox} label="Lead Inbox & AI Pitcher" />
+            <TabTrigger value="bot" icon={BrainCircuit} label="AI Marketing Bot" />
             <TabTrigger value="payouts" icon={Wallet} label="Payouts & Integrations" />
           </TabsList>
 
