@@ -52,10 +52,12 @@ import {
   seedLogs,
   seedStats,
 } from "@/lib/bounty-mock";
-import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, Target, X } from "lucide-react";
+import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RotateCcw, Save, Target, X } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
 import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
+import { usePersistedState, clearPersisted } from "@/lib/persist";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -94,12 +96,15 @@ const URGENCY_STYLES: Record<Lead["urgency"], string> = {
 };
 
 function Dashboard() {
-  const [automation, setAutomation] = useState(true);
-  const [autoPilot, setAutoPilot] = useState(false);
-  const [leads, setLeads] = useState<Lead[]>(seedLeads);
-  const [selectedId, setSelectedId] = useState<string>(seedLeads[0].id);
-  const [logs, setLogs] = useState<LogEntry[]>(seedLogs);
-  const [stats, setStats] = useState(seedStats);
+  const [automation, setAutomation] = usePersistedState("automation", true);
+  const [autoPilot, setAutoPilot] = usePersistedState("autoPilot", false);
+  const [leads, setLeads] = usePersistedState<Lead[]>("leads", seedLeads);
+  const [selectedId, setSelectedId] = usePersistedState<string>(
+    "selectedLeadId",
+    seedLeads[0].id,
+  );
+  const [logs, setLogs] = usePersistedState<LogEntry[]>("logs", seedLogs);
+  const [stats, setStats] = usePersistedState("stats", seedStats);
   const [tick, setTick] = useState(0);
 
   const selected = useMemo(
@@ -127,7 +132,7 @@ function Dashboard() {
       setStats((s) => ({ ...s, scanned: s.scanned + Math.floor(Math.random() * 3) + 1 }));
     }, 2200);
     return () => window.clearInterval(id);
-  }, [automation]);
+  }, [automation, setLogs, setStats]);
 
   const handleSendPitch = (lead: Lead) => {
     setLeads((prev) =>
@@ -144,6 +149,22 @@ function Dashboard() {
       description: `${lead.source} • $${lead.budget.toLocaleString()} • ${lead.urgency}`,
     });
   };
+
+  const handleResetAll = () => {
+    setStats({ scanned: 0, pitches: 0, conversions: 0, earned: 0 });
+    setLogs([
+      {
+        t: new Date().toTimeString().slice(0, 5),
+        level: "ok",
+        msg: "Counters reset to zero — fresh start.",
+      },
+    ]);
+    setLeads((prev) => prev.map((l) => ({ ...l, status: "new" as const })));
+    toast.success("All numbers reset to 0", {
+      description: "Profile links & marketing plan kept. Tracking starts from now.",
+    });
+  };
+
 
   return (
     <div className="min-h-screen text-foreground">
