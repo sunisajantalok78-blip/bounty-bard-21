@@ -1735,3 +1735,77 @@ function ChatLauncher({
   );
 }
 
+
+/* ---------------- Profile Link Row with progress re-check ---------------- */
+
+function LinkRow({
+  label,
+  value,
+  onChange,
+  placeholder,
+  checking,
+  progress,
+  onCheck,
+  disabledRecheck,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  checking: boolean;
+  progress?: { lastCheckedAt: string; summary: string };
+  onCheck: () => void;
+  disabledRecheck?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </Label>
+        {progress && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-[10px] text-muted-foreground underline-offset-2 hover:text-neon hover:underline"
+          >
+            {open ? "hide" : "show"} last check ·{" "}
+            {new Date(progress.lastCheckedAt).toLocaleString()}
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={checking || disabledRecheck}
+          onClick={onCheck}
+          className="h-9 shrink-0 border-neon/30 text-neon hover:bg-neon/10 hover:text-neon disabled:opacity-50"
+          title={disabledRecheck ? "Generate a plan first" : `Re-check ${label} progress`}
+        >
+          {checking ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              {progress ? "Update" : "Check"}
+            </>
+          )}
+        </Button>
+      </div>
+      {open && progress && (
+        <div className="mt-1 rounded-lg border border-neon/20 bg-surface/60 p-3 text-xs leading-relaxed text-foreground/85 whitespace-pre-wrap">
+          {progress.summary}
+        </div>
+      )}
+    </div>
+  );
+}
