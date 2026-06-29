@@ -74,6 +74,13 @@ export const Route = createFileRoute("/")({
         content: "Hunt, pitch, and convert paid dev work on autopilot.",
       },
     ],
+    scripts: [
+      {
+        src: "https://cloud.umami.is/script.js",
+        "data-website-id": "30ef8190-8bb0-49a7-b46a-aac210415fe1",
+        defer: true,
+      },
+    ],
   }),
   component: Dashboard,
 });
