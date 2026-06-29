@@ -54,7 +54,7 @@ import {
 } from "@/lib/bounty-mock";
 import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, MessageSquare, RefreshCw, RotateCcw, Save, Square, Target, X } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
-import { generateMarketingPlan, type MarketingPlan } from "@/lib/marketing-bot.functions";
+import { generateMarketingPlan, refreshProfileAudit, type MarketingPlan } from "@/lib/marketing-bot.functions";
 import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
 import { usePersistedState, clearPersisted } from "@/lib/persist";
 
@@ -982,8 +982,8 @@ function MarketingBotTab() {
   const run = useServerFn(generateMarketingPlan);
   const [facebook, setFacebook] = usePersistedState("bot.facebook", developerProfile.facebook);
   const [linkedin, setLinkedin] = usePersistedState("bot.linkedin", developerProfile.linkedin);
-  const [fiverr, setFiverr] = usePersistedState("bot.fiverr", "https://www.fiverr.com/");
-  const [github, setGithub] = usePersistedState("bot.github", "https://github.com/bahdan-los");
+  const [fiverr, setFiverr] = usePersistedState("bot.fiverr", developerProfile.fiverr);
+  const [github, setGithub] = usePersistedState("bot.github", developerProfile.github);
   const [other, setOther] = usePersistedState("bot.other", "");
   const [goals, setGoals] = usePersistedState(
     "bot.goals",
@@ -1002,7 +1002,13 @@ function MarketingBotTab() {
   const [progressNotes, setProgressNotes] = usePersistedState("bot.progressNotes", "");
   const [checkingPlatform, setCheckingPlatform] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [auditRefreshing, setAuditRefreshing] = useState(false);
+  const [auditRefreshedAt, setAuditRefreshedAt] = usePersistedState<string | null>(
+    "bot.auditRefreshedAt",
+    null,
+  );
   const recheckFn = useServerFn(chatWithMarketingBot);
+  const refreshAuditFn = useServerFn(refreshProfileAudit);
 
 
   const portfolioText = useMemo(
@@ -1060,6 +1066,58 @@ function MarketingBotTab() {
       }
       return { ...s, [id]: { done: true, doneAt: new Date().toISOString() } };
     });
+
+  const runAuditRefresh = async (opts?: { silent?: boolean }) => {
+    if (!plan) return;
+    setAuditRefreshing(true);
+    try {
+      const res = await refreshAuditFn({
+        data: {
+          profileLinks: { facebook, linkedin, fiverr, github, other },
+          goals,
+          portfolio: portfolioText,
+          previousAudit: plan.profile_audit ?? [],
+          completedTasks,
+          pendingTasks,
+          notes: progressNotes,
+        },
+      });
+      setPlan((p) => (p ? { ...p, profile_audit: res.audit } : p));
+      setAuditRefreshedAt(new Date().toISOString());
+      if (!opts?.silent) {
+        toast.success("Profile audit refreshed", {
+          description: "Scores & fix-now items now reflect your completed tasks.",
+        });
+      }
+    } catch (e) {
+      if (!opts?.silent) {
+        toast.error("Audit refresh failed", {
+          description: e instanceof Error ? e.message : "Unknown error",
+        });
+      }
+    } finally {
+      setAuditRefreshing(false);
+    }
+  };
+
+  // Auto re-audit (debounced) whenever the set of completed tasks changes.
+  const completedCount = completedTasks.length;
+  const lastAuditedCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!plan) return;
+    if (lastAuditedCountRef.current === null) {
+      lastAuditedCountRef.current = completedCount;
+      return;
+    }
+    if (lastAuditedCountRef.current === completedCount) return;
+    const t = window.setTimeout(() => {
+      lastAuditedCountRef.current = completedCount;
+      void runAuditRefresh({ silent: true });
+    }, 1500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedCount, plan?.profile_audit ? "p" : "n"]);
+
 
   const recheckLink = async (platform: string, url: string) => {
     if (!url.trim()) {
@@ -1386,17 +1444,44 @@ Respond with a tight progress report in this exact markdown layout:
 
               {!!plan.profile_audit?.length && (
                 <SectionCard icon={Target} title="Profile audit">
-                  <ChatLauncher
-                    plan={plan}
-                    profile={{
-                      name: developerProfile.name,
-                      role: developerProfile.role,
-                      links: { facebook, linkedin, fiverr, github, other },
-                      portfolio: portfolioText,
-                      goals,
-                    }}
-                    progress={progressPayload}
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ChatLauncher
+                      plan={plan}
+                      profile={{
+                        name: developerProfile.name,
+                        role: developerProfile.role,
+                        links: { facebook, linkedin, fiverr, github, other },
+                        portfolio: portfolioText,
+                        goals,
+                      }}
+                      progress={progressPayload}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={auditRefreshing}
+                      onClick={() => runAuditRefresh()}
+                      className="h-8 border-neon/40 text-neon hover:bg-neon/10"
+                    >
+                      {auditRefreshing ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Refreshing…
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Refresh audit
+                        </>
+                      )}
+                    </Button>
+                    {auditRefreshedAt && (
+                      <span className="text-[11px] text-muted-foreground">
+                        updated {new Date(auditRefreshedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Auto-refreshes ~1.5s after you tick a task complete — scores rise and "fix now" items drop as you execute.
+                  </p>
                   <div className="mt-4 grid gap-3">
                     {plan.profile_audit.map((a, i) => (
                       <div key={i} className="rounded-xl border border-border bg-surface/60 p-4">
