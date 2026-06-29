@@ -1015,9 +1015,11 @@ function MarketingBotTab() {
         },
       });
       setPlan(res.plan);
-      toast.success("Plan generated", {
-        description: "Daily actions, post drafts and income forecast ready.",
+      setPlanGeneratedAt(new Date().toISOString());
+      toast.success("Plan generated & saved", {
+        description: "Your plan is remembered — close the tab and come back any time.",
       });
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Generation failed";
       setError(msg);
