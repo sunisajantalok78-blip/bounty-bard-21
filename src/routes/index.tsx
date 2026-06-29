@@ -1428,15 +1428,33 @@ Respond with a tight progress report in this exact markdown layout:
                           <span className="text-xs text-muted-foreground">{d.focus}</span>
                         </div>
                         <ul className="space-y-1.5">
-                          {d.tasks?.map((t, j) => (
-                            <li key={j} className="grid grid-cols-[60px_1fr] gap-3 text-sm">
-                              <span className="font-mono text-xs text-muted-foreground">{t.time}</span>
-                              <div>
-                                <div className="font-medium">{t.task}</div>
-                                {t.why && <div className="text-xs text-muted-foreground">{t.why}</div>}
-                              </div>
-                            </li>
-                          ))}
+                          {d.tasks?.map((t, j) => {
+                            const id = `d${i}-t${j}`;
+                            const done = !!taskState[id]?.done;
+                            return (
+                              <li key={j} className="grid grid-cols-[28px_60px_1fr] items-start gap-3 text-sm">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTask(id)}
+                                  className={`mt-0.5 grid h-5 w-5 place-items-center rounded border transition ${
+                                    done
+                                      ? "border-neon bg-neon text-neon-foreground"
+                                      : "border-border bg-surface hover:border-neon/50"
+                                  }`}
+                                  aria-label={done ? "Mark task incomplete" : "Mark task complete"}
+                                >
+                                  {done ? <Check className="h-3 w-3" /> : <Square className="h-3 w-3 opacity-0" />}
+                                </button>
+                                <span className="font-mono text-xs text-muted-foreground">{t.time}</span>
+                                <div>
+                                  <div className={`font-medium ${done ? "text-muted-foreground line-through" : ""}`}>
+                                    {t.task}
+                                  </div>
+                                  {t.why && <div className="text-xs text-muted-foreground">{t.why}</div>}
+                                </div>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}
