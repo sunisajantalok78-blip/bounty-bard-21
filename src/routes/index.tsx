@@ -1002,7 +1002,13 @@ function MarketingBotTab() {
   const [progressNotes, setProgressNotes] = usePersistedState("bot.progressNotes", "");
   const [checkingPlatform, setCheckingPlatform] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [auditRefreshing, setAuditRefreshing] = useState(false);
+  const [auditRefreshedAt, setAuditRefreshedAt] = usePersistedState<string | null>(
+    "bot.auditRefreshedAt",
+    null,
+  );
   const recheckFn = useServerFn(chatWithMarketingBot);
+  const refreshAuditFn = useServerFn(refreshProfileAudit);
 
 
   const portfolioText = useMemo(
