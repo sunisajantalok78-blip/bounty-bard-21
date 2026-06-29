@@ -1805,12 +1805,25 @@ function ChatLauncher({
               </div>
               <div>
                 <div className="text-sm font-semibold">AI Marketing Coach</div>
-                <div className="text-[11px] text-muted-foreground">Has your full plan + profile in context</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Remembers chat history, audits & completed tasks
+                </div>
               </div>
             </div>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={clearChat}
+                title="Clear chat history"
+              >
+                Clear
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div ref={scrollRef} className="max-h-[420px] space-y-3 overflow-y-auto p-4">
