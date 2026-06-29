@@ -187,8 +187,10 @@ function Dashboard() {
               setAutomation={setAutomation}
               stats={stats}
               logs={logs}
+              onReset={handleResetAll}
             />
           </TabsContent>
+
 
           <TabsContent value="portfolio" className="mt-0">
             <PortfolioTab />
@@ -302,12 +304,15 @@ function MonitorTab({
   setAutomation,
   stats,
   logs,
+  onReset,
 }: {
   automation: boolean;
   setAutomation: (v: boolean) => void;
   stats: typeof seedStats;
   logs: LogEntry[];
+  onReset: () => void;
 }) {
+
   return (
     <div className="grid gap-6">
       {/* Hero / automation toggle */}
