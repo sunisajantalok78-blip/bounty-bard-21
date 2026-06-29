@@ -1827,22 +1827,60 @@ function ChatLauncher({
           </div>
 
           <div ref={scrollRef} className="max-h-[420px] space-y-3 overflow-y-auto p-4">
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                    m.role === "user"
-                      ? "bg-neon text-neon-foreground"
-                      : "border border-border/60 bg-surface text-foreground/95"
-                  }`}
-                >
-                  {m.content}
+            {messages.map((m, i) => {
+              const tasks = m.role === "assistant" ? extractTasks(m.content) : [];
+              return (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "bg-neon text-neon-foreground"
+                        : "border border-border/60 bg-surface text-foreground/95"
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap">{m.content}</div>
+                    {tasks.length > 0 && (
+                      <div className="mt-3 space-y-1.5 border-t border-border/40 pt-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-neon">
+                          Actionable tasks
+                        </div>
+                        {tasks.map((t, j) => {
+                          const key = `${i}:${j}:${t.slice(0, 60)}`;
+                          const done = !!completedFromChat[key];
+                          return (
+                            <div key={key} className="flex items-start gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={done}
+                                onClick={() => markDone(key, t)}
+                                className={`h-6 shrink-0 px-2 text-[10px] ${
+                                  done
+                                    ? "border-neon/30 bg-neon/10 text-neon"
+                                    : "border-neon/40 text-neon hover:bg-neon/10"
+                                }`}
+                              >
+                                {done ? (
+                                  <>
+                                    <Check className="mr-1 h-3 w-3" /> Done
+                                  </>
+                                ) : (
+                                  <>✓ Complete</>
+                                )}
+                              </Button>
+                              <div className={`text-xs ${done ? "text-muted-foreground line-through" : "text-foreground/90"}`}>
+                                {t}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {loading && (
               <div className="flex justify-start">
                 <div className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-surface px-3.5 py-2.5 text-sm text-muted-foreground">
