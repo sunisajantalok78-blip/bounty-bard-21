@@ -490,16 +490,18 @@ function MetricCard({
 /* ---------------- Portfolio Tab ---------------- */
 
 function PortfolioTab() {
-  const [name, setName] = useState(developerProfile.name);
-  const [role, setRole] = useState(developerProfile.role);
-  const [linkedin, setLinkedin] = useState(developerProfile.linkedin);
-  const [facebook, setFacebook] = useState(developerProfile.facebook);
-  const [stack, setStack] = useState(
+  const [name, setName] = usePersistedState("profile.name", developerProfile.name);
+  const [role, setRole] = usePersistedState("profile.role", developerProfile.role);
+  const [linkedin, setLinkedin] = usePersistedState("profile.linkedin", developerProfile.linkedin);
+  const [facebook, setFacebook] = usePersistedState("profile.facebook", developerProfile.facebook);
+  const [stack, setStack] = usePersistedState(
+    "profile.stack",
     portfolioRepos
       .map((r, i) => `${i + 1}. ${r.name} — ${r.tagline}\n   stack: ${r.stack}`)
       .join("\n"),
   );
-  const [prompt, setPrompt] = useState(
+  const [prompt, setPrompt] = usePersistedState(
+    "profile.systemPrompt",
     `You are an autonomous pitcher writing on behalf of {{name}} ({{role}}).
 
 Voice:
@@ -508,6 +510,7 @@ Voice:
 
 Rules:
 - Open with the SPECIFIC pain in the post (one sentence).
+
 - Then map ONE relevant GitHub repo from the portfolio to the problem (use repo name).
 - Propose concrete deliverable + realistic timeline.
 - State a fixed price anchored to the listed budget.
