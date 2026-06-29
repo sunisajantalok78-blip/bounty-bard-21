@@ -1118,7 +1118,9 @@ function MarketingBotTab() {
         },
       });
       setPlan((p) => (p ? { ...p, profile_audit: res.audit } : p));
-      setAuditRefreshedAt(new Date().toISOString());
+      const now = new Date().toISOString();
+      setAuditHistory((h) => [...h, { at: now, audit: res.audit }].slice(-20));
+      setAuditRefreshedAt(now);
       if (!opts?.silent) {
         toast.success("Profile audit refreshed", {
           description: "Scores & fix-now items now reflect your completed tasks.",
