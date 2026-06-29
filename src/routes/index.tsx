@@ -1086,23 +1086,18 @@ function MarketingBotTab() {
               )}
 
               {!!plan.profile_audit?.length && (
-                <SectionCard
-                  icon={Target}
-                  title="Profile audit"
-                  right={
-                    <ChatLauncher
-                      plan={plan}
-                      profile={{
-                        name: developerProfile.name,
-                        role: developerProfile.role,
-                        links: { facebook, linkedin, fiverr, github, other },
-                        portfolio: portfolioText,
-                        goals,
-                      }}
-                    />
-                  }
-                >
-                  <div className="grid gap-3">
+                <SectionCard icon={Target} title="Profile audit">
+                  <ChatLauncher
+                    plan={plan}
+                    profile={{
+                      name: developerProfile.name,
+                      role: developerProfile.role,
+                      links: { facebook, linkedin, fiverr, github, other },
+                      portfolio: portfolioText,
+                      goals,
+                    }}
+                  />
+                  <div className="mt-4 grid gap-3">
                     {plan.profile_audit.map((a, i) => (
                       <div key={i} className="rounded-xl border border-border bg-surface/60 p-4">
                         <div className="mb-2 flex items-center justify-between">
