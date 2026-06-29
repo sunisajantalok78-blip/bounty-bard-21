@@ -100,5 +100,40 @@ Now produce the JSON plan. Be specific (real timeframes, real $ figures, real po
       // non-fatal
     }
 
-    return { plan: plan as unknown };
+    return { plan: JSON.parse(JSON.stringify(plan)) as MarketingPlan };
+  });
+
+export type MarketingPlan = {
+  summary?: string;
+  profile_audit?: Array<{
+    platform?: string;
+    url?: string;
+    score?: number;
+    strengths?: string[];
+    weaknesses?: string[];
+    fix_now?: string[];
+  }>;
+  daily_actions?: Array<{
+    day?: string;
+    focus?: string;
+    tasks?: Array<{ time?: string; task?: string; why?: string }>;
+  }>;
+  post_drafts?: Array<{
+    platform?: string;
+    hook?: string;
+    body?: string;
+    cta?: string;
+    hashtags?: string[];
+    image_prompt?: string;
+  }>;
+  income_forecast?: {
+    week_1_low_usd?: number;
+    week_1_high_usd?: number;
+    month_1_low_usd?: number;
+    month_1_high_usd?: number;
+    quarter_1_low_usd?: number;
+    quarter_1_high_usd?: number;
+    assumptions?: string[];
+  };
+  next_milestones?: Array<{ when?: string; milestone?: string; expected_usd?: number }>;
   });
