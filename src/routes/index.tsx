@@ -908,7 +908,110 @@ function PayoutsTab({ stats }: { stats: typeof seedStats }) {
         </div>
       </div>
 
+      <SyncStatusPanel />
       <WebhookField />
+    </div>
+  );
+}
+
+/* ---------- Sync + n8n status panel ---------- */
+function SyncStatusPanel() {
+  const check = useServerFn(checkIntegrations);
+  const test = useServerFn(sendTestToN8n);
+  const [status, setStatus] = useState<{
+    supabase_configured?: boolean;
+    supabase_ok?: boolean;
+    supabase_error?: string;
+    n8n_configured?: boolean;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const r = await check();
+      setStatus(r);
+    } catch (e) {
+      toast.error("Health check failed", { description: (e as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      const r = await test({ data: { note: "Test ping from Bounty Hunter dashboard" } });
+      if (r.ok) toast.success("n8n received the test event", { description: `HTTP ${r.status}` });
+      else toast.error("n8n test failed", { description: r.error ?? `HTTP ${r.status ?? "?"}` });
+    } catch (e) {
+      toast.error("Dispatch error", { description: (e as Error).message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const dot = (ok: boolean | undefined) =>
+    ok ? "bg-neon" : ok === false ? "bg-red-500" : "bg-muted-foreground/40";
+
+  return (
+    <div className="glass-panel rounded-2xl p-5">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-neon/10 text-neon">
+            <Zap className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold">Knowledge base &amp; n8n sync</h3>
+            <p className="text-xs text-muted-foreground">
+              Every new lead, task completion, and generated pitch is mirrored to your Supabase and forwarded to your n8n workflow.
+            </p>
+          </div>
+        </div>
+        <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
+          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          Recheck
+        </Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-border/60 bg-surface/40 p-4">
+          <div className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <span className={`h-2 w-2 rounded-full ${dot(status?.supabase_ok)}`} />
+            Your Supabase (knowledge base)
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {status?.supabase_configured
+              ? status.supabase_ok
+                ? "Connected. Tables reachable."
+                : status.supabase_error?.includes("relation")
+                  ? "Keys valid — but the schema tables don't exist yet. Run supabase/USER_SCHEMA.sql in your SQL editor."
+                  : `Reachable but errored: ${status.supabase_error ?? "unknown"}`
+              : "Keys not configured."}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/60 bg-surface/40 p-4">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <span className={`h-2 w-2 rounded-full ${dot(status?.n8n_configured)}`} />
+              n8n webhook (outbound)
+            </div>
+            <Button size="sm" variant="outline" onClick={sendTest} disabled={testing || !status?.n8n_configured}>
+              {testing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+              Send test
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {status?.n8n_configured
+              ? "Configured. Test ping will POST { event: 'test' } to your webhook."
+              : "N8N_WEBHOOK_URL not configured."}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
