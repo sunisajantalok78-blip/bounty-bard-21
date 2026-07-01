@@ -14,7 +14,7 @@ export type N8nEvent =
 export async function dispatchToN8n(event: N8nEvent): Promise<{
   ok: boolean;
   status?: number;
-  response?: unknown;
+  response?: string | null;
   error?: string;
 }> {
   const url = process.env.N8N_WEBHOOK_URL;
@@ -28,7 +28,7 @@ export async function dispatchToN8n(event: N8nEvent): Promise<{
   };
 
   let status: number | undefined;
-  let response: unknown;
+  let response: string | null = null;
   let ok = false;
   let error: string | undefined;
 
@@ -37,7 +37,6 @@ export async function dispatchToN8n(event: N8nEvent): Promise<{
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // localtunnel warning bypass
         "bypass-tunnel-reminder": "1",
         "User-Agent": "bounty-hunter/1.0",
       },
@@ -45,12 +44,7 @@ export async function dispatchToN8n(event: N8nEvent): Promise<{
     });
     status = res.status;
     ok = res.ok;
-    const text = await res.text();
-    try {
-      response = JSON.parse(text);
-    } catch {
-      response = text.slice(0, 500);
-    }
+    response = (await res.text()).slice(0, 800);
     if (!ok) error = `n8n ${status}`;
   } catch (e) {
     error = e instanceof Error ? e.message : "unknown";
