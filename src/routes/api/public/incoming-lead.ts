@@ -137,8 +137,44 @@ export const Route = createFileRoute("/api/public/incoming-lead")({
           .update({ email_sent: mail.sent, email_error: mail.error })
           .eq("id", inserted.id);
 
+        // Mirror to the user's own Supabase (knowledge base)
+        try {
+          const { getUserSupabase } = await import("@/integrations/user-supabase/client.server");
+          const userSb = getUserSupabase();
+          if (userSb) {
+            await userSb.from("leads").insert({
+              id: inserted.id,
+              source: data.source,
+              title: data.title,
+              budget: Number.isFinite(budget as number) ? (budget as number) : null,
+              urgency: data.urgency,
+              description: data.description ?? null,
+              contact: data.contact ?? null,
+              raw: body as never,
+              email_sent: mail.sent,
+              email_error: mail.error,
+            });
+          }
+        } catch { /* non-fatal */ }
+
+        // Fire outbound n8n event
+        let n8n: { ok: boolean; status?: number; error?: string } = { ok: false };
+        try {
+          const { dispatchToN8n } = await import("@/lib/n8n.server");
+          const r = await dispatchToN8n({
+            type: "lead.new",
+            data: { id: inserted.id, ...data, budget },
+          });
+          n8n = { ok: r.ok, status: r.status, error: r.error };
+          if (n8n.ok) {
+            await supabaseAdmin.from("leads").update({ n8n_forwarded: true } as never).eq("id", inserted.id);
+          }
+        } catch (e) {
+          n8n = { ok: false, error: e instanceof Error ? e.message : "unknown" };
+        }
+
         return new Response(
-          JSON.stringify({ ok: true, id: inserted.id, email: mail }),
+          JSON.stringify({ ok: true, id: inserted.id, email: mail, n8n }),
           { status: 200, headers: { "content-type": "application/json", ...cors } },
         );
       },
