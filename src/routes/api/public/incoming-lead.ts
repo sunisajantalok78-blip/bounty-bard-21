@@ -166,9 +166,6 @@ export const Route = createFileRoute("/api/public/incoming-lead")({
             data: { id: inserted.id, ...data, budget },
           });
           n8n = { ok: r.ok, status: r.status, error: r.error };
-          if (n8n.ok) {
-            await supabaseAdmin.from("leads").update({ n8n_forwarded: true } as never).eq("id", inserted.id);
-          }
         } catch (e) {
           n8n = { ok: false, error: e instanceof Error ? e.message : "unknown" };
         }
