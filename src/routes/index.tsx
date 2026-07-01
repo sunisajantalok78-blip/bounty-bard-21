@@ -56,6 +56,7 @@ import { Copy, Check, BrainCircuit, CalendarClock, LineChart, Loader2, Mail, Mes
 import { useServerFn } from "@tanstack/react-start";
 import { generateMarketingPlan, refreshProfileAudit, type MarketingPlan } from "@/lib/marketing-bot.functions";
 import { chatWithMarketingBot } from "@/lib/marketing-chat.functions";
+import { checkIntegrations, sendTestToN8n } from "@/lib/knowledge-base.functions";
 import { usePersistedState, clearPersisted } from "@/lib/persist";
 
 
