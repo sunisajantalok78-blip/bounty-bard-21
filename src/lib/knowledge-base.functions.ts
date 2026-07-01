@@ -44,7 +44,7 @@ export const dispatchEvent = createServerFn({ method: "POST" })
 const ChatTurnInput = z.object({
   role: z.enum(["user", "assistant", "system"]),
   content: z.string().min(1).max(20000),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const saveChatTurn = createServerFn({ method: "POST" })
