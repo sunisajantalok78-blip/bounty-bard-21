@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           ai_pitch: string | null
           budget: number | null
+          business_proposal: string | null
           contact: string | null
           created_at: string
           description: string | null
@@ -25,6 +26,7 @@ export type Database = {
           email_sent: boolean
           id: string
           raw: Json | null
+          raw_social_data: Json | null
           source: string
           status: string
           title: string
@@ -33,6 +35,7 @@ export type Database = {
         Insert: {
           ai_pitch?: string | null
           budget?: number | null
+          business_proposal?: string | null
           contact?: string | null
           created_at?: string
           description?: string | null
@@ -40,6 +43,7 @@ export type Database = {
           email_sent?: boolean
           id?: string
           raw?: Json | null
+          raw_social_data?: Json | null
           source?: string
           status?: string
           title: string
@@ -48,6 +52,7 @@ export type Database = {
         Update: {
           ai_pitch?: string | null
           budget?: number | null
+          business_proposal?: string | null
           contact?: string | null
           created_at?: string
           description?: string | null
@@ -55,6 +60,7 @@ export type Database = {
           email_sent?: boolean
           id?: string
           raw?: Json | null
+          raw_social_data?: Json | null
           source?: string
           status?: string
           title?: string
