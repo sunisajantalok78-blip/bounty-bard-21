@@ -8,12 +8,34 @@ export const listLeadsFn = createServerFn({ method: "GET" }).handler(async () =>
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("leads")
-    .select("id,title,description,source,contact,ai_pitch,status,budget,urgency,created_at")
+    .select("id,title,description,source,contact,ai_pitch,business_proposal,raw_social_data,status,budget,urgency,created_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw new Error(error.message);
   return data ?? [];
 });
+
+export const requestProposalFn = createServerFn({ method: "POST" })
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: lead, error } = await supabaseAdmin
+      .from("leads")
+      .select("id,title,description,source,contact,raw_social_data")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!lead) throw new Error("lead not found");
+
+    await supabaseAdmin.from("leads").update({ status: "generating" }).eq("id", data.id);
+
+    const { dispatchToN8n } = await import("@/lib/n8n.server");
+    const res = await dispatchToN8n({
+      type: "lead.new",
+      data: { action: "generate_proposal", lead_id: lead.id, lead },
+    });
+    return { ok: res.ok, status: res.status, error: res.error };
+  });
 
 export const updateLeadStatusFn = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string; status: string; ai_pitch?: string }) =>
