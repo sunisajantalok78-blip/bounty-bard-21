@@ -63,13 +63,41 @@ function DashboardPage() {
   );
 }
 
+function LiveSyncBar({ count, updatedAt, refetching, onRefresh }: { count: number; updatedAt: number; refetching: boolean; onRefresh: () => void }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(i);
+  }, []);
+  const secs = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-tick={tick}>
+      <span className="relative flex h-2.5 w-2.5">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+      </span>
+      <Radio className="h-3.5 w-3.5 text-emerald-400" />
+      <span className="font-medium text-foreground">Live Sync</span>
+      <span className="text-muted-foreground">· {count} rows in Supabase</span>
+      <span className="text-muted-foreground">· updated {secs}s ago</span>
+      <Button variant="ghost" size="sm" className="ml-auto h-7 px-2" onClick={onRefresh} disabled={refetching}>
+        <RefreshCw className={`h-3.5 w-3.5 mr-1 ${refetching ? "animate-spin" : ""}`} />
+        Refresh
+      </Button>
+    </div>
+  );
+}
+
 function LeadsPanel() {
   const qc = useQueryClient();
-  const { data: leads } = useSuspenseQuery(leadsQO());
+  const query = useSuspenseQuery(leadsQO());
+  const leads = query.data;
   const createLead = useServerFn(createLeadFn);
   const updateStatus = useServerFn(updateLeadStatusFn);
+  const requestProposal = useServerFn(requestProposalFn);
 
   const [selectedId, setSelectedId] = useState<string | null>(leads[0]?.id ?? null);
+  const [expandedProposal, setExpandedProposal] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({ title: "", description: "", source: "manual", contact: "", ai_pitch: "" });
 
   const createMut = useMutation({
@@ -86,6 +114,14 @@ function LeadsPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "leads"] }),
   });
 
+  const proposalMut = useMutation({
+    mutationFn: (id: string) => requestProposal({ data: { id } }),
+    onSuccess: (_r, id) => {
+      setExpandedProposal((s) => ({ ...s, [id]: true }));
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+    },
+  });
+
   const selected = leads.find((l) => l.id === selectedId) ?? leads[0];
 
   return (
@@ -95,7 +131,14 @@ function LeadsPanel() {
         <CardTitle>Leads Inbox</CardTitle>
         <Badge variant="secondary" className="ml-auto">{leads.length}</Badge>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
+        <LiveSyncBar
+          count={leads.length}
+          updatedAt={query.dataUpdatedAt}
+          refetching={query.isFetching}
+          onRefresh={() => qc.invalidateQueries({ queryKey: ["dash", "leads"] })}
+        />
+
         <form
           className="grid gap-2 rounded-lg border border-border/60 bg-muted/30 p-3"
           onSubmit={(e) => {
@@ -120,32 +163,40 @@ function LeadsPanel() {
         </form>
 
         {leads.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No leads yet. Post one above or wait for your webhook to receive them.</p>
+          <p className="text-sm text-muted-foreground">
+            No leads in Supabase yet. Once your n8n scrape workflow inserts rows, they will stream in here automatically.
+          </p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-            <ul className="space-y-1 max-h-[420px] overflow-auto pr-1">
-              {leads.map((l) => (
-                <li key={l.id}>
-                  <button
-                    onClick={() => setSelectedId(l.id)}
-                    className={`w-full text-left rounded-md px-3 py-2 text-sm transition ${
-                      selected?.id === l.id
-                        ? "bg-primary/15 border border-primary/40"
-                        : "hover:bg-muted/60 border border-transparent"
-                    }`}
-                  >
-                    <div className="font-medium truncate">{l.title}</div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                      <span>{l.source}</span>
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5">{l.status ?? "pending"}</Badge>
-                    </div>
-                  </button>
-                </li>
-              ))}
+          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
+            <ul className="space-y-1 max-h-[520px] overflow-auto pr-1">
+              {leads.map((l) => {
+                const hasProposal = Boolean(l.business_proposal);
+                return (
+                  <li key={l.id}>
+                    <button
+                      onClick={() => setSelectedId(l.id)}
+                      className={`w-full text-left rounded-md px-3 py-2 text-sm transition ${
+                        selected?.id === l.id
+                          ? "bg-primary/15 border border-primary/40"
+                          : "hover:bg-muted/60 border border-transparent"
+                      }`}
+                    >
+                      <div className="font-medium truncate flex items-center gap-1.5">
+                        {hasProposal && <Zap className="h-3 w-3 text-amber-400" />}
+                        {l.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                        <span>{l.source}</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5">{l.status ?? "pending"}</Badge>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
 
             {selected && (
-              <div className="rounded-lg border border-border/60 bg-card/50 p-4 space-y-3">
+              <div className="rounded-lg border border-border/60 bg-card/50 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{selected.title}</h3>
                   <Badge>{selected.source}</Badge>
@@ -163,12 +214,72 @@ function LeadsPanel() {
                   <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
                     <Sparkles className="h-3.5 w-3.5" /> AI generated pitch
                   </div>
-                  <div className="rounded-md border border-border/60 bg-background/60 p-3 text-sm whitespace-pre-wrap min-h-[80px]">
+                  <div className="rounded-md border border-border/60 bg-background/60 p-3 text-sm whitespace-pre-wrap min-h-[60px]">
                     {selected.ai_pitch || <span className="text-muted-foreground">No pitch generated yet.</span>}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-1">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={proposalMut.isPending && proposalMut.variables === selected.id}
+                      onClick={() => proposalMut.mutate(selected.id)}
+                      className="bg-gradient-to-r from-primary to-accent"
+                    >
+                      <Zap className="h-3.5 w-3.5 mr-1" />
+                      {proposalMut.isPending && proposalMut.variables === selected.id
+                        ? "Dispatching to n8n…"
+                        : selected.business_proposal
+                          ? "Regenerate Pro Proposal"
+                          : "Generate Pro Proposal"}
+                    </Button>
+                    {selected.business_proposal && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setExpandedProposal((s) => ({ ...s, [selected.id]: !s[selected.id] }))
+                        }
+                      >
+                        {expandedProposal[selected.id] ? (
+                          <><ChevronUp className="h-3.5 w-3.5 mr-1" /> Hide proposal</>
+                        ) : (
+                          <><ChevronDown className="h-3.5 w-3.5 mr-1" /> View proposal</>
+                        )}
+                      </Button>
+                    )}
+                    {selected.status === "generating" && !selected.business_proposal && (
+                      <span className="text-xs text-amber-400 flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3 animate-spin" /> Waiting for n8n to write back…
+                      </span>
+                    )}
+                  </div>
+
+                  {expandedProposal[selected.id] && selected.business_proposal && (
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
+                      <div className="text-xs uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-1">
+                        <Zap className="h-3.5 w-3.5" /> Pro Business Proposal
+                      </div>
+                      <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                        {selected.business_proposal}
+                      </div>
+                      {selected.raw_social_data && (
+                        <details className="mt-3">
+                          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                            Raw social data
+                          </summary>
+                          <pre className="text-[11px] mt-2 max-h-64 overflow-auto bg-background/60 p-2 rounded border border-border/40">
+                            {JSON.stringify(selected.raw_social_data, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
                   {(["pitched", "won", "lost", "ignored"] as const).map((s) => (
                     <Button
                       key={s}
