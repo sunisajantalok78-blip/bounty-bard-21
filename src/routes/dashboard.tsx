@@ -1,11 +1,12 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   listLeadsFn,
   updateLeadStatusFn,
   createLeadFn,
+  requestProposalFn,
   listPortfolioFn,
   addPortfolioFn,
   deletePortfolioFn,
@@ -15,9 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Inbox, Briefcase, Send, Plus, Trash2, Sparkles } from "lucide-react";
+import { Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp, Radio, Zap, RefreshCw } from "lucide-react";
 
-const leadsQO = () => queryOptions({ queryKey: ["dash", "leads"], queryFn: () => listLeadsFn() });
+const leadsQO = () =>
+  queryOptions({ queryKey: ["dash", "leads"], queryFn: () => listLeadsFn(), refetchInterval: 15000 });
 const portfolioQO = () =>
   queryOptions({ queryKey: ["dash", "portfolio"], queryFn: () => listPortfolioFn() });
 
