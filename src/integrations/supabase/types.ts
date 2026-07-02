@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       leads: {
         Row: {
+          ai_pitch: string | null
           budget: number | null
           contact: string | null
           created_at: string
@@ -25,10 +26,12 @@ export type Database = {
           id: string
           raw: Json | null
           source: string
+          status: string
           title: string
           urgency: string
         }
         Insert: {
+          ai_pitch?: string | null
           budget?: number | null
           contact?: string | null
           created_at?: string
@@ -38,10 +41,12 @@ export type Database = {
           id?: string
           raw?: Json | null
           source?: string
+          status?: string
           title: string
           urgency?: string
         }
         Update: {
+          ai_pitch?: string | null
           budget?: number | null
           contact?: string | null
           created_at?: string
@@ -51,6 +56,7 @@ export type Database = {
           id?: string
           raw?: Json | null
           source?: string
+          status?: string
           title?: string
           urgency?: string
         }
@@ -77,6 +83,27 @@ export type Database = {
           id?: string
           plan?: Json
           profile_links?: Json
+        }
+        Relationships: []
+      }
+      my_portfolio: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
         }
         Relationships: []
       }
