@@ -1,27 +1,44 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   listLeadsFn,
   updateLeadStatusFn,
   createLeadFn,
+  quickIngestFn,
   requestProposalFn,
   listPortfolioFn,
   addPortfolioFn,
+  updatePortfolioFn,
   deletePortfolioFn,
+  getScraperConfigFn,
+  saveScraperConfigFn,
+  LEAD_STATUSES,
+  type LeadStatus,
 } from "@/lib/dashboard.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp, Radio, Zap, RefreshCw } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import {
+  Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
+  Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
+  Layers, ClipboardList, Rocket, Trophy,
+} from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 const leadsQO = () =>
   queryOptions({ queryKey: ["dash", "leads"], queryFn: () => listLeadsFn(), refetchInterval: 15000 });
 const portfolioQO = () =>
   queryOptions({ queryKey: ["dash", "portfolio"], queryFn: () => listPortfolioFn() });
+const scraperQO = () =>
+  queryOptions({ queryKey: ["dash", "scraper"], queryFn: () => getScraperConfigFn() });
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -33,6 +50,7 @@ export const Route = createFileRoute("/dashboard")({
   loader: ({ context }) => {
     context.queryClient.ensureQueryData(leadsQO());
     context.queryClient.ensureQueryData(portfolioQO());
+    context.queryClient.ensureQueryData(scraperQO());
   },
   errorComponent: ({ error }) => (
     <div className="p-8 text-red-400">Dashboard error: {error.message}</div>
@@ -44,24 +62,115 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+      <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
         <header>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Lead Dashboard
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Incoming leads → AI pitches → portfolio matches. New leads auto-fire your n8n webhook.
+            Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
           </p>
         </header>
 
-        <section className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
-          <LeadsPanel />
-          <PortfolioPanel />
-        </section>
+        <MetricsBar />
+        <QuickIngest />
+
+        <Tabs defaultValue="leads" className="space-y-4">
+          <TabsList className="grid grid-cols-3 max-w-xl">
+            <TabsTrigger value="leads"><Inbox className="h-4 w-4 mr-2" />Leads</TabsTrigger>
+            <TabsTrigger value="portfolio"><Briefcase className="h-4 w-4 mr-2" />Portfolio</TabsTrigger>
+            <TabsTrigger value="scraper"><Settings2 className="h-4 w-4 mr-2" />Scraper</TabsTrigger>
+          </TabsList>
+          <TabsContent value="leads"><LeadsPanel /></TabsContent>
+          <TabsContent value="portfolio"><PortfolioPanel /></TabsContent>
+          <TabsContent value="scraper"><ScraperPanel /></TabsContent>
+        </Tabs>
       </div>
     </div>
   );
 }
+
+/* ---------------- Metrics ---------------- */
+
+function MetricsBar() {
+  const { data: leads } = useSuspenseQuery(leadsQO());
+  const total = leads.length;
+  const pendingAi = leads.filter((l) => l.status === "pending" || l.status === "generating").length;
+  const ready = leads.filter((l) => Boolean(l.business_proposal) || l.status === "ready").length;
+  const sent = leads.filter((l) => l.status === "sent" || l.status === "pitched").length;
+  const won = leads.filter((l) => l.status === "won" || l.status === "closed").length;
+
+  const items = [
+    { label: "Total Leads", value: total, icon: Layers, color: "text-primary" },
+    { label: "Pending AI", value: pendingAi, icon: ClipboardList, color: "text-amber-400" },
+    { label: "Proposals Ready", value: ready, icon: Zap, color: "text-yellow-400" },
+    { label: "Sent", value: sent, icon: Rocket, color: "text-sky-400" },
+    { label: "Won / Closed", value: won, icon: Trophy, color: "text-emerald-400" },
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {items.map((m) => (
+        <div key={m.label} className="rounded-lg border border-border/60 bg-card/50 p-3 flex items-center gap-3">
+          <m.icon className={`h-5 w-5 ${m.color}`} />
+          <div>
+            <div className="text-xs text-muted-foreground">{m.label}</div>
+            <div className="text-xl font-semibold tabular-nums">{m.value}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------------- Quick ingest ---------------- */
+
+function QuickIngest() {
+  const qc = useQueryClient();
+  const ingest = useServerFn(quickIngestFn);
+  const [value, setValue] = useState("");
+  const mut = useMutation({
+    mutationFn: (input: string) => ingest({ data: { input } }),
+    onSuccess: () => {
+      setValue("");
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+    },
+  });
+  return (
+    <Card className="border-primary/40 bg-primary/5">
+      <CardContent className="p-3 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+        <Sparkles className="h-5 w-5 text-primary shrink-0 hidden sm:block" />
+        <Textarea
+          rows={1}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Paste a FB/Insta/LinkedIn/Web URL or a raw job description — auto-saves to Supabase + fires n8n"
+          className="min-h-[42px] resize-none bg-background/60"
+        />
+        <Button
+          disabled={!value.trim() || mut.isPending}
+          onClick={() => mut.mutate(value)}
+          className="bg-gradient-to-r from-primary to-accent shrink-0"
+        >
+          {mut.isPending ? "Ingesting…" : "Ingest → n8n"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ---------------- Leads ---------------- */
+
+const STATUS_STYLES: Record<LeadStatus, string> = {
+  pending: "bg-slate-500/20 text-slate-300 border-slate-500/40",
+  generating: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  ready: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  pitched: "bg-sky-500/20 text-sky-300 border-sky-500/40",
+  sent: "bg-sky-500/20 text-sky-300 border-sky-500/40",
+  won: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  closed: "bg-emerald-600/20 text-emerald-300 border-emerald-600/40",
+  lost: "bg-rose-500/20 text-rose-300 border-rose-500/40",
+  ignored: "bg-zinc-500/20 text-zinc-400 border-zinc-500/40",
+};
 
 function LiveSyncBar({ count, updatedAt, refetching, onRefresh }: { count: number; updatedAt: number; refetching: boolean; onRefresh: () => void }) {
   const [tick, setTick] = useState(0);
@@ -99,6 +208,7 @@ function LeadsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(leads[0]?.id ?? null);
   const [expandedProposal, setExpandedProposal] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({ title: "", description: "", source: "manual", contact: "", ai_pitch: "" });
+  const [copied, setCopied] = useState<string | null>(null);
 
   const createMut = useMutation({
     mutationFn: (v: typeof form) => createLead({ data: v }),
@@ -109,8 +219,7 @@ function LeadsPanel() {
   });
 
   const statusMut = useMutation({
-    mutationFn: (v: { id: string; status: "pending" | "pitched" | "won" | "lost" | "ignored" }) =>
-      updateStatus({ data: v }),
+    mutationFn: (v: { id: string; status: LeadStatus }) => updateStatus({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "leads"] }),
   });
 
@@ -123,6 +232,14 @@ function LeadsPanel() {
   });
 
   const selected = leads.find((l) => l.id === selectedId) ?? leads[0];
+
+  const copyPitch = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+      setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
+    } catch { /* noop */ }
+  };
 
   return (
     <Card className="border-border/60">
@@ -139,38 +256,42 @@ function LeadsPanel() {
           onRefresh={() => qc.invalidateQueries({ queryKey: ["dash", "leads"] })}
         />
 
-        <form
-          className="grid gap-2 rounded-lg border border-border/60 bg-muted/30 p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!form.title.trim()) return;
-            createMut.mutate(form);
-          }}
-        >
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input placeholder="Lead title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <Input placeholder="Source (GitHub, LinkedIn…)" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
-          </div>
-          <Textarea rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input placeholder="Contact (email / URL)" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
-            <Input placeholder="AI pitch (optional)" value={form.ai_pitch} onChange={(e) => setForm({ ...form, ai_pitch: e.target.value })} />
-          </div>
-          <Button type="submit" size="sm" disabled={createMut.isPending} className="justify-self-start">
-            <Plus className="h-4 w-4 mr-1" />
-            {createMut.isPending ? "Adding & firing webhook…" : "Add lead + trigger n8n"}
-          </Button>
-        </form>
+        <details className="rounded-lg border border-border/60 bg-muted/30">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium select-none">Manual lead (advanced)</summary>
+          <form
+            className="grid gap-2 p-3 pt-0"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!form.title.trim()) return;
+              createMut.mutate(form);
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input placeholder="Lead title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <Input placeholder="Source" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
+            </div>
+            <Textarea rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input placeholder="Contact" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
+              <Input placeholder="AI pitch (optional)" value={form.ai_pitch} onChange={(e) => setForm({ ...form, ai_pitch: e.target.value })} />
+            </div>
+            <Button type="submit" size="sm" disabled={createMut.isPending} className="justify-self-start">
+              <Plus className="h-4 w-4 mr-1" />
+              {createMut.isPending ? "Adding…" : "Add lead + trigger n8n"}
+            </Button>
+          </form>
+        </details>
 
         {leads.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No leads in Supabase yet. Once your n8n scrape workflow inserts rows, they will stream in here automatically.
+            No leads yet. Paste something into the quick ingest above.
           </p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-            <ul className="space-y-1 max-h-[520px] overflow-auto pr-1">
+          <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+            <ul className="space-y-1 max-h-[560px] overflow-auto pr-1">
               {leads.map((l) => {
                 const hasProposal = Boolean(l.business_proposal);
+                const st = (l.status ?? "pending") as LeadStatus;
                 return (
                   <li key={l.id}>
                     <button
@@ -185,9 +306,9 @@ function LeadsPanel() {
                         {hasProposal && <Zap className="h-3 w-3 text-amber-400" />}
                         {l.title}
                       </div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                        <span>{l.source}</span>
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5">{l.status ?? "pending"}</Badge>
+                      <div className="text-xs flex items-center gap-2 mt-0.5">
+                        <span className="text-muted-foreground">{l.source}</span>
+                        <span className={`text-[10px] rounded border px-1.5 py-0.5 ${STATUS_STYLES[st] ?? ""}`}>{st}</span>
                       </div>
                     </button>
                   </li>
@@ -205,10 +326,16 @@ function LeadsPanel() {
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selected.description}</p>
                 )}
                 {selected.contact && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground break-all">
                     Contact: <span className="text-foreground">{selected.contact}</span>
                   </p>
                 )}
+
+                <StatusPipeline
+                  current={(selected.status ?? "pending") as LeadStatus}
+                  pending={statusMut.isPending}
+                  onChange={(status) => statusMut.mutate({ id: selected.id, status })}
+                />
 
                 <div>
                   <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
@@ -217,6 +344,15 @@ function LeadsPanel() {
                   <div className="rounded-md border border-border/60 bg-background/60 p-3 text-sm whitespace-pre-wrap min-h-[60px]">
                     {selected.ai_pitch || <span className="text-muted-foreground">No pitch generated yet.</span>}
                   </div>
+                  {selected.ai_pitch && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <Button size="sm" variant="outline" onClick={() => copyPitch(selected.id, selected.ai_pitch!)}>
+                        {copied === selected.id ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                        {copied === selected.id ? "Copied" : "Copy Pitch"}
+                      </Button>
+                      <QuickOpenMenu pitch={selected.ai_pitch} contact={selected.contact} />
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -236,19 +372,30 @@ function LeadsPanel() {
                           : "Generate Pro Proposal"}
                     </Button>
                     {selected.business_proposal && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setExpandedProposal((s) => ({ ...s, [selected.id]: !s[selected.id] }))
-                        }
-                      >
-                        {expandedProposal[selected.id] ? (
-                          <><ChevronUp className="h-3.5 w-3.5 mr-1" /> Hide proposal</>
-                        ) : (
-                          <><ChevronDown className="h-3.5 w-3.5 mr-1" /> View proposal</>
-                        )}
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setExpandedProposal((s) => ({ ...s, [selected.id]: !s[selected.id] }))
+                          }
+                        >
+                          {expandedProposal[selected.id] ? (
+                            <><ChevronUp className="h-3.5 w-3.5 mr-1" /> Hide proposal</>
+                          ) : (
+                            <><ChevronDown className="h-3.5 w-3.5 mr-1" /> View proposal</>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyPitch(`${selected.id}-prop`, selected.business_proposal!)}
+                        >
+                          {copied === `${selected.id}-prop` ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                          Copy Proposal
+                        </Button>
+                        <QuickOpenMenu pitch={selected.business_proposal} contact={selected.contact} />
+                      </>
                     )}
                     {selected.status === "generating" && !selected.business_proposal && (
                       <span className="text-xs text-amber-400 flex items-center gap-1">
@@ -278,21 +425,6 @@ function LeadsPanel() {
                     </div>
                   )}
                 </div>
-
-                <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
-                  {(["pitched", "won", "lost", "ignored"] as const).map((s) => (
-                    <Button
-                      key={s}
-                      variant={selected.status === s ? "default" : "outline"}
-                      size="sm"
-                      disabled={statusMut.isPending}
-                      onClick={() => statusMut.mutate({ id: selected.id, status: s })}
-                    >
-                      {s === "pitched" && <Send className="h-3.5 w-3.5 mr-1" />}
-                      Mark {s}
-                    </Button>
-                  ))}
-                </div>
               </div>
             )}
           </div>
@@ -302,87 +434,309 @@ function LeadsPanel() {
   );
 }
 
+function StatusPipeline({ current, pending, onChange }: { current: LeadStatus; pending: boolean; onChange: (s: LeadStatus) => void }) {
+  const pipeline: LeadStatus[] = ["pending", "generating", "ready", "sent", "won", "closed"];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-3">
+      <span className="text-xs uppercase tracking-wider text-muted-foreground mr-1">Pipeline</span>
+      {pipeline.map((s, i) => {
+        const active = current === s;
+        return (
+          <button
+            key={s}
+            disabled={pending || active}
+            onClick={() => onChange(s)}
+            className={`text-[11px] px-2 py-1 rounded border transition ${
+              active ? STATUS_STYLES[s] : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+            } ${pending ? "opacity-60" : ""}`}
+          >
+            {i > 0 && <span className="opacity-50 mr-1">›</span>}
+            {s}
+          </button>
+        );
+      })}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" variant="ghost" className="h-7 ml-auto">
+            <ChevronDown className="h-3.5 w-3.5 mr-1" /> More
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Set status</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {LEAD_STATUSES.map((s) => (
+            <DropdownMenuItem key={s} onClick={() => onChange(s)}>
+              {current === s && <Check className="h-3.5 w-3.5 mr-1" />} {s}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function QuickOpenMenu({ pitch, contact }: { pitch: string; contact: string | null }) {
+  const encoded = encodeURIComponent(pitch.slice(0, 1500));
+  const contactRaw = (contact ?? "").trim();
+  const phone = contactRaw.replace(/[^\d+]/g, "");
+  const isPhone = phone.length >= 6;
+  const links = [
+    { label: "WhatsApp", href: isPhone ? `https://wa.me/${phone.replace("+", "")}?text=${encoded}` : `https://wa.me/?text=${encoded}` },
+    { label: "Telegram", href: `https://t.me/share/url?url=${encoded}&text=${encoded}` },
+    { label: "FB Messenger", href: contactRaw && /facebook\.com/.test(contactRaw) ? contactRaw : `https://m.me/` },
+  ];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline">
+          <MessageCircle className="h-3.5 w-3.5 mr-1" /> Quick Open <ChevronDown className="h-3 w-3 ml-1" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Send via</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {links.map((l) => (
+          <DropdownMenuItem key={l.label} asChild>
+            <a href={l.href} target="_blank" rel="noreferrer">{l.label}</a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* ---------------- Portfolio ---------------- */
+
+const PORTFOLIO_CATEGORIES = ["Marketing", "CRM", "Language", "Case study", "Skill", "Project", "Tool"];
+
 function PortfolioPanel() {
   const qc = useQueryClient();
   const { data: items } = useSuspenseQuery(portfolioQO());
   const addFn = useServerFn(addPortfolioFn);
+  const updFn = useServerFn(updatePortfolioFn);
   const delFn = useServerFn(deletePortfolioFn);
-  const [draft, setDraft] = useState({ category: "skill", content: "" });
+
+  const [draft, setDraft] = useState({ category: "Marketing", content: "" });
+  const [filter, setFilter] = useState<string>("All");
+  const [editing, setEditing] = useState<{ id: string; category: string; content: string } | null>(null);
 
   const addMut = useMutation({
     mutationFn: (v: typeof draft) => addFn({ data: v }),
-    onSuccess: () => {
-      setDraft({ category: "skill", content: "" });
-      qc.invalidateQueries({ queryKey: ["dash", "portfolio"] });
-    },
+    onSuccess: () => { setDraft({ category: draft.category, content: "" }); qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }); },
+  });
+  const updMut = useMutation({
+    mutationFn: (v: { id: string; category: string; content: string }) => updFn({ data: v }),
+    onSuccess: () => { setEditing(null); qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }); },
   });
   const delMut = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }),
   });
 
+  const categories = useMemo(() => {
+    const set = new Set<string>(["All"]);
+    items.forEach((i) => set.add(i.category));
+    PORTFOLIO_CATEGORIES.forEach((c) => set.add(c));
+    return [...set];
+  }, [items]);
+  const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
+
   return (
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-center gap-2">
         <Briefcase className="h-5 w-5 text-accent" />
-        <CardTitle>My Portfolio</CardTitle>
+        <CardTitle>Portfolio & Knowledge Base</CardTitle>
         <Badge variant="secondary" className="ml-auto">{items.length}</Badge>
       </CardHeader>
       <CardContent className="space-y-4">
         <form
-          className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!draft.content.trim()) return;
-            addMut.mutate(draft);
-          }}
+          className="grid gap-2 rounded-lg border border-border/60 bg-muted/30 p-3"
+          onSubmit={(e) => { e.preventDefault(); if (!draft.content.trim()) return; addMut.mutate(draft); }}
         >
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
-              className="rounded-md border border-border bg-background px-2 text-sm"
+              className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={draft.category}
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
             >
-              <option value="skill">Skill</option>
-              <option value="case-study">Case study</option>
-              <option value="project">Project</option>
-              <option value="tool">Tool</option>
+              {PORTFOLIO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <Input
-              placeholder="e.g. React, Supabase, n8n workflow…"
+            <Textarea
+              rows={2}
+              placeholder="Case study, skill, or teaching method…"
               value={draft.content}
               onChange={(e) => setDraft({ ...draft, content: e.target.value })}
+              className="flex-1"
             />
-            <Button type="submit" size="sm" disabled={addMut.isPending}>
-              <Plus className="h-4 w-4" />
+            <Button type="submit" size="sm" disabled={addMut.isPending} className="self-start sm:self-auto">
+              <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
           </div>
         </form>
 
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No portfolio entries yet — add your first skill or case study.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setFilter(c)}
+              className={`text-xs px-2 py-1 rounded border transition ${
+                filter === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c} {c !== "All" && <span className="opacity-60">({items.filter((i) => i.category === c).length})</span>}
+            </button>
+          ))}
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No entries in this category yet.</p>
         ) : (
-          <ul className="space-y-2 max-h-[520px] overflow-auto pr-1">
-            {items.map((it) => (
-              <li
-                key={it.id}
-                className="flex items-start gap-2 rounded-md border border-border/60 bg-card/40 p-2"
-              >
-                <Badge variant="outline" className="capitalize shrink-0">{it.category}</Badge>
-                <p className="text-sm flex-1 whitespace-pre-wrap">{it.content}</p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  disabled={delMut.isPending}
-                  onClick={() => delMut.mutate(it.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </li>
-            ))}
+          <ul className="grid gap-2 md:grid-cols-2">
+            {filtered.map((it) => {
+              const isEditing = editing?.id === it.id;
+              return (
+                <li key={it.id} className="rounded-md border border-border/60 bg-card/40 p-3 space-y-2">
+                  {isEditing ? (
+                    <>
+                      <div className="flex gap-2">
+                        <select
+                          className="rounded-md border border-border bg-background px-2 text-sm"
+                          value={editing.category}
+                          onChange={(e) => setEditing({ ...editing, category: e.target.value })}
+                        >
+                          {PORTFOLIO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <div className="ml-auto flex gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)}><X className="h-4 w-4" /></Button>
+                          <Button size="sm" disabled={updMut.isPending} onClick={() => updMut.mutate(editing)}>
+                            <Save className="h-3.5 w-3.5 mr-1" /> Save
+                          </Button>
+                        </div>
+                      </div>
+                      <Textarea rows={3} value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} />
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-2">
+                        <Badge variant="outline" className="capitalize shrink-0">{it.category}</Badge>
+                        <div className="ml-auto flex gap-1">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing({ id: it.id, category: it.category, content: it.content })}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" disabled={delMut.isPending} onClick={() => delMut.mutate(it.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{it.content}</p>
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ---------------- Scraper ---------------- */
+
+function ScraperPanel() {
+  const qc = useQueryClient();
+  const { data: cfg } = useSuspenseQuery(scraperQO());
+  const saveFn = useServerFn(saveScraperConfigFn);
+
+  const srcObj = (cfg.sources ?? {}) as Record<string, unknown>;
+  const [sources, setSources] = useState({
+    facebook: Boolean(srcObj.facebook),
+    instagram: Boolean(srcObj.instagram),
+    google: Boolean(srcObj.google),
+    linkedin: Boolean(srcObj.linkedin),
+  });
+  const [keywords, setKeywords] = useState<string[]>(cfg.keywords ?? []);
+  const [kwInput, setKwInput] = useState("");
+
+  const saveMut = useMutation({
+    mutationFn: () => saveFn({ data: { sources, keywords } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
+  });
+
+  const addKw = () => {
+    const v = kwInput.trim();
+    if (!v) return;
+    if (keywords.includes(v)) { setKwInput(""); return; }
+    setKeywords([...keywords, v]);
+    setKwInput("");
+  };
+  const removeKw = (k: string) => setKeywords(keywords.filter((x) => x !== k));
+
+  const sourceList: Array<{ key: keyof typeof sources; label: string }> = [
+    { key: "facebook", label: "Facebook" },
+    { key: "instagram", label: "Instagram" },
+    { key: "google", label: "Google / Web" },
+    { key: "linkedin", label: "LinkedIn" },
+  ];
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="flex flex-row items-center gap-2">
+        <Settings2 className="h-5 w-5 text-primary" />
+        <CardTitle>Scraper & Keywords</CardTitle>
+        <Badge variant="secondary" className="ml-auto">config</Badge>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <section>
+          <h4 className="text-sm font-medium mb-2">Active sources</h4>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {sourceList.map((s) => (
+              <label key={s.key} className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card/40 px-3 py-2 cursor-pointer">
+                <span className="text-sm">{s.label}</span>
+                <Switch
+                  checked={sources[s.key]}
+                  onCheckedChange={(v) => setSources({ ...sources, [s.key]: Boolean(v) })}
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h4 className="text-sm font-medium mb-2">Target keywords</h4>
+          <div className="flex gap-2 mb-2">
+            <Input
+              placeholder="Add keyword (e.g. Swedish language) and press Enter"
+              value={kwInput}
+              onChange={(e) => setKwInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKw(); } }}
+            />
+            <Button type="button" size="sm" onClick={addKw}><Plus className="h-4 w-4" /></Button>
+          </div>
+          {keywords.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No keywords yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {keywords.map((k) => (
+                <span key={k} className="text-xs px-2 py-1 rounded-full border border-primary/40 bg-primary/10 flex items-center gap-1">
+                  {k}
+                  <button onClick={() => removeKw(k)} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="flex items-center justify-between border-t border-border/40 pt-3">
+          <span className="text-xs text-muted-foreground">
+            Last updated: {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString() : "—"}
+          </span>
+          <Button disabled={saveMut.isPending} onClick={() => saveMut.mutate()} className="bg-gradient-to-r from-primary to-accent">
+            {saveMut.isPending ? "Saving…" : "Save config → n8n"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
