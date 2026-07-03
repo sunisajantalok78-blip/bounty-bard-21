@@ -113,6 +113,33 @@ export type Database = {
         }
         Relationships: []
       }
+      scraper_config: {
+        Row: {
+          created_at: string
+          id: string
+          keywords: string[]
+          singleton: boolean
+          sources: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          singleton?: boolean
+          sources?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          singleton?: boolean
+          sources?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
