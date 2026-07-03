@@ -648,11 +648,12 @@ function ScraperPanel() {
   const { data: cfg } = useSuspenseQuery(scraperQO());
   const saveFn = useServerFn(saveScraperConfigFn);
 
+  const srcObj = (cfg.sources ?? {}) as Record<string, unknown>;
   const [sources, setSources] = useState({
-    facebook: Boolean(cfg.sources?.facebook),
-    instagram: Boolean(cfg.sources?.instagram),
-    google: Boolean(cfg.sources?.google),
-    linkedin: Boolean(cfg.sources?.linkedin),
+    facebook: Boolean(srcObj.facebook),
+    instagram: Boolean(srcObj.instagram),
+    google: Boolean(srcObj.google),
+    linkedin: Boolean(srcObj.linkedin),
   });
   const [keywords, setKeywords] = useState<string[]>(cfg.keywords ?? []);
   const [kwInput, setKwInput] = useState("");
