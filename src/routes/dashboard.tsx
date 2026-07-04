@@ -214,35 +214,69 @@ function QuickIngest() {
   const qc = useQueryClient();
   const ingest = useServerFn(quickIngestFn);
   const [value, setValue] = useState("");
+  const parsed = useMemo(() => parseRawContacts(value), [value]);
+  const hasParsed = parsed.emails.length + parsed.phones.length + parsed.handles.length + parsed.urls.length > 0;
+
   const mut = useMutation({
-    mutationFn: (input: string) => ingest({ data: { input } }),
+    mutationFn: (input: string) => {
+      const p = parseRawContacts(input);
+      const contact = pickPrimaryContact(p, "");
+      const raw_social_data = hasParsedContacts(p) ? { parsed: p, ingested_at: new Date().toISOString() } : null;
+      return ingest({ data: { input, contact: contact || null, raw_social_data } });
+    },
     onSuccess: () => {
       setValue("");
       qc.invalidateQueries({ queryKey: ["dash", "leads"] });
     },
   });
+
   return (
     <Card className="border-primary/40 bg-primary/5">
-      <CardContent className="p-3 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
-        <Sparkles className="h-5 w-5 text-primary shrink-0 hidden sm:block" />
-        <Textarea
-          rows={1}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Paste a FB/Insta/LinkedIn/Web URL or a raw job description — auto-saves to Supabase + fires n8n"
-          className="min-h-[42px] resize-none bg-background/60"
-        />
-        <Button
-          disabled={!value.trim() || mut.isPending}
-          onClick={() => mut.mutate(value)}
-          className="bg-gradient-to-r from-primary to-accent shrink-0"
-        >
-          {mut.isPending ? "Ingesting…" : "Ingest → n8n"}
-        </Button>
+      <CardContent className="p-3 space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <Sparkles className="h-5 w-5 text-primary shrink-0 hidden sm:block" />
+          <Textarea
+            rows={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Paste a URL, raw social post, or job dump — emails/phones/handles auto-extract before saving"
+            className="min-h-[42px] resize-none bg-background/60"
+          />
+          <Button
+            disabled={!value.trim() || mut.isPending}
+            onClick={() => mut.mutate(value)}
+            className="bg-gradient-to-r from-primary to-accent shrink-0"
+          >
+            {mut.isPending ? "Ingesting…" : "Ingest → n8n"}
+          </Button>
+        </div>
+        {hasParsed && (
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            {parsed.emails.map((e) => <ContactChip key={e} label={e} color="emerald" />)}
+            {parsed.phones.map((p) => <ContactChip key={p} label={p} color="sky" />)}
+            {parsed.handles.map((h) => <ContactChip key={h} label={h} color="violet" />)}
+            {parsed.urls.map((u) => <ContactChip key={u} label={u.length > 40 ? u.slice(0, 40) + "…" : u} color="amber" />)}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
+
+function hasParsedContacts(p: ParsedContacts) {
+  return p.emails.length + p.phones.length + p.handles.length + p.urls.length > 0;
+}
+
+function ContactChip({ label, color }: { label: string; color: "emerald" | "sky" | "violet" | "amber" }) {
+  const map = {
+    emerald: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    sky: "border-sky-500/40 bg-sky-500/10 text-sky-300",
+    violet: "border-violet-500/40 bg-violet-500/10 text-violet-300",
+    amber: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  } as const;
+  return <span className={`rounded-full border px-2 py-0.5 ${map[color]}`}>{label}</span>;
+}
+
 
 /* ---------------- Leads ---------------- */
 
