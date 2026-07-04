@@ -2,6 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   listLeadsFn,
   updateLeadStatusFn,
@@ -14,6 +15,7 @@ import {
   deletePortfolioFn,
   getScraperConfigFn,
   saveScraperConfigFn,
+  triggerGlobalScrapeFn,
   LEAD_STATUSES,
   type LeadStatus,
 } from "@/lib/dashboard.functions";
@@ -27,11 +29,95 @@ import { Switch } from "@/components/ui/switch";
 import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
-  Layers, ClipboardList, Rocket, Trophy,
+  Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+
+/* ---------- Client-side raw-data parser ---------- */
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const PHONE_RE = /(?:\+?\d[\d\s().-]{6,}\d)/g;
+const HANDLE_RE = /(?:^|[\s(])@([a-zA-Z0-9_.]{2,30})/g;
+const URL_RE = /https?:\/\/[^\s<>"']+/gi;
+export type ParsedContacts = {
+  emails: string[]; phones: string[]; handles: string[]; urls: string[];
+};
+export function parseRawContacts(text: string): ParsedContacts {
+  const emails = Array.from(new Set(text.match(EMAIL_RE) ?? []));
+  const phones = Array.from(new Set((text.match(PHONE_RE) ?? []).map((s) => s.trim()).filter((s) => s.replace(/\D/g, "").length >= 7)));
+  const handles = Array.from(new Set(Array.from(text.matchAll(HANDLE_RE)).map((m) => `@${m[1]}`)));
+  const urls = Array.from(new Set(text.match(URL_RE) ?? []));
+  return { emails, phones, handles, urls };
+}
+function pickPrimaryContact(p: ParsedContacts, fallback: string): string {
+  return p.emails[0] ?? p.phones[0] ?? p.urls[0] ?? p.handles[0] ?? fallback;
+}
+
+/* ---------- Processing status stepper ---------- */
+const PROCESSING_STEPS = [
+  { key: "scraping_profile",  label: "Scraping" },
+  { key: "validating_contact", label: "Validating" },
+  { key: "generating_pitch",  label: "Generating" },
+  { key: "success",           label: "Success" },
+] as const;
+type ProcStep = typeof PROCESSING_STEPS[number]["key"] | "failed" | null | undefined;
+
+function ProcessingStepper({ status }: { status: ProcStep }) {
+  if (!status) return null;
+  const failed = status === "failed";
+  const idx = failed ? -1 : PROCESSING_STEPS.findIndex((s) => s.key === status);
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-background/60 px-2 py-1.5 text-[11px]">
+      {failed ? (
+        <span className="flex items-center gap-1 text-rose-400">
+          <AlertTriangle className="h-3.5 w-3.5" /> n8n reported failure
+        </span>
+      ) : (
+        PROCESSING_STEPS.map((s, i) => {
+          const done = i < idx || status === "success";
+          const active = i === idx && status !== "success";
+          return (
+            <span key={s.key} className="flex items-center gap-1">
+              {active ? <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                : done ? <Check className="h-3 w-3 text-emerald-400" />
+                : <span className="h-2 w-2 rounded-full border border-border/60" />}
+              <span className={active ? "text-amber-300" : done ? "text-emerald-300" : "text-muted-foreground"}>{s.label}</span>
+              {i < PROCESSING_STEPS.length - 1 && <span className="opacity-40 mx-0.5">·</span>}
+            </span>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/* ---------- Validation badge ---------- */
+function ValidationBadge({ contact, description, status }: { contact: string | null; description: string | null; status?: string | null }) {
+  const missingContact = !contact || contact.trim().length < 4;
+  const shortDesc = (description ?? "").trim().length < 30;
+  const invalid = status === "invalid" || missingContact || shortDesc;
+  const verified = status === "verified" && !missingContact && !shortDesc;
+  const validating = status === "validating";
+  if (validating) {
+    return <span className="text-[10px] inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">
+      <Loader2 className="h-3 w-3 animate-spin" /> Validating
+    </span>;
+  }
+  if (invalid) {
+    return <span title={missingContact ? "No valid contact" : shortDesc ? "Description < 30 chars" : "Marked invalid"}
+      className="text-[10px] inline-flex items-center gap-1 rounded border border-rose-500/40 bg-rose-500/10 text-rose-300 px-1.5 py-0.5">
+      <ShieldAlert className="h-3 w-3" /> {missingContact ? "No contact" : shortDesc ? "Thin data" : "Invalid"}
+    </span>;
+  }
+  if (verified) {
+    return <span className="text-[10px] inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5">
+      <ShieldCheck className="h-3 w-3" /> Verified
+    </span>;
+  }
+  return null;
+}
+
 
 const leadsQO = () =>
   queryOptions({ queryKey: ["dash", "leads"], queryFn: () => listLeadsFn(), refetchInterval: 15000 });
@@ -128,35 +214,69 @@ function QuickIngest() {
   const qc = useQueryClient();
   const ingest = useServerFn(quickIngestFn);
   const [value, setValue] = useState("");
+  const parsed = useMemo(() => parseRawContacts(value), [value]);
+  const hasParsed = parsed.emails.length + parsed.phones.length + parsed.handles.length + parsed.urls.length > 0;
+
   const mut = useMutation({
-    mutationFn: (input: string) => ingest({ data: { input } }),
+    mutationFn: (input: string) => {
+      const p = parseRawContacts(input);
+      const contact = pickPrimaryContact(p, "");
+      const raw_social_data = hasParsedContacts(p) ? { parsed: p, ingested_at: new Date().toISOString() } : null;
+      return ingest({ data: { input, contact: contact || null, raw_social_data } });
+    },
     onSuccess: () => {
       setValue("");
       qc.invalidateQueries({ queryKey: ["dash", "leads"] });
     },
   });
+
   return (
     <Card className="border-primary/40 bg-primary/5">
-      <CardContent className="p-3 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
-        <Sparkles className="h-5 w-5 text-primary shrink-0 hidden sm:block" />
-        <Textarea
-          rows={1}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Paste a FB/Insta/LinkedIn/Web URL or a raw job description — auto-saves to Supabase + fires n8n"
-          className="min-h-[42px] resize-none bg-background/60"
-        />
-        <Button
-          disabled={!value.trim() || mut.isPending}
-          onClick={() => mut.mutate(value)}
-          className="bg-gradient-to-r from-primary to-accent shrink-0"
-        >
-          {mut.isPending ? "Ingesting…" : "Ingest → n8n"}
-        </Button>
+      <CardContent className="p-3 space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <Sparkles className="h-5 w-5 text-primary shrink-0 hidden sm:block" />
+          <Textarea
+            rows={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Paste a URL, raw social post, or job dump — emails/phones/handles auto-extract before saving"
+            className="min-h-[42px] resize-none bg-background/60"
+          />
+          <Button
+            disabled={!value.trim() || mut.isPending}
+            onClick={() => mut.mutate(value)}
+            className="bg-gradient-to-r from-primary to-accent shrink-0"
+          >
+            {mut.isPending ? "Ingesting…" : "Ingest → n8n"}
+          </Button>
+        </div>
+        {hasParsed && (
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            {parsed.emails.map((e) => <ContactChip key={e} label={e} color="emerald" />)}
+            {parsed.phones.map((p) => <ContactChip key={p} label={p} color="sky" />)}
+            {parsed.handles.map((h) => <ContactChip key={h} label={h} color="violet" />)}
+            {parsed.urls.map((u) => <ContactChip key={u} label={u.length > 40 ? u.slice(0, 40) + "…" : u} color="amber" />)}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
+
+function hasParsedContacts(p: ParsedContacts) {
+  return p.emails.length + p.phones.length + p.handles.length + p.urls.length > 0;
+}
+
+function ContactChip({ label, color }: { label: string; color: "emerald" | "sky" | "violet" | "amber" }) {
+  const map = {
+    emerald: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    sky: "border-sky-500/40 bg-sky-500/10 text-sky-300",
+    violet: "border-violet-500/40 bg-violet-500/10 text-violet-300",
+    amber: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  } as const;
+  return <span className={`rounded-full border px-2 py-0.5 ${map[color]}`}>{label}</span>;
+}
+
 
 /* ---------------- Leads ---------------- */
 
@@ -230,6 +350,17 @@ function LeadsPanel() {
       qc.invalidateQueries({ queryKey: ["dash", "leads"] });
     },
   });
+
+  // Realtime: refetch leads whenever Supabase pushes any change (n8n writeback).
+  useEffect(() => {
+    const channel = supabase
+      .channel("leads-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
+        qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [qc]);
 
   const selected = leads.find((l) => l.id === selectedId) ?? leads[0];
 
@@ -306,9 +437,13 @@ function LeadsPanel() {
                         {hasProposal && <Zap className="h-3 w-3 text-amber-400" />}
                         {l.title}
                       </div>
-                      <div className="text-xs flex items-center gap-2 mt-0.5">
+                      <div className="text-xs flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-muted-foreground">{l.source}</span>
                         <span className={`text-[10px] rounded border px-1.5 py-0.5 ${STATUS_STYLES[st] ?? ""}`}>{st}</span>
+                        <ValidationBadge contact={l.contact} description={l.description} status={l.validation_status} />
+                        {l.processing_status && l.processing_status !== "success" && (
+                          <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                        )}
                       </div>
                     </button>
                   </li>
@@ -320,8 +455,12 @@ function LeadsPanel() {
               <div className="rounded-lg border border-border/60 bg-card/50 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{selected.title}</h3>
-                  <Badge>{selected.source}</Badge>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    <ValidationBadge contact={selected.contact} description={selected.description} status={selected.validation_status} />
+                    <Badge>{selected.source}</Badge>
+                  </div>
                 </div>
+                <ProcessingStepper status={selected.processing_status as ProcStep} />
                 {selected.description && (
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selected.description}</p>
                 )}
@@ -663,6 +802,9 @@ function ScraperPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
   });
 
+  const triggerFn = useServerFn(triggerGlobalScrapeFn);
+  const triggerMut = useMutation({ mutationFn: () => triggerFn() });
+
   const addKw = () => {
     const v = kwInput.trim();
     if (!v) return;
@@ -727,6 +869,28 @@ function ScraperPanel() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <PlayCircle className="h-4 w-4 text-emerald-400" />
+            <h4 className="text-sm font-medium">Master switch</h4>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Fire an immediate <code>trigger_live_scrape</code> command to n8n using the current source & keyword config.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              disabled={triggerMut.isPending}
+              onClick={() => triggerMut.mutate()}
+              className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
+            >
+              {triggerMut.isPending ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Dispatching…</>) : (<><PlayCircle className="h-4 w-4 mr-1" /> Trigger Global Scrape Now</>)}
+            </Button>
+            {triggerMut.data?.ok && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check className="h-3 w-3" /> Sent (HTTP {triggerMut.data.status ?? "?"})</span>}
+            {triggerMut.data && !triggerMut.data.ok && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {triggerMut.data.error ?? `HTTP ${triggerMut.data.status}`}</span>}
+          </div>
         </section>
 
         <div className="flex items-center justify-between border-t border-border/40 pt-3">

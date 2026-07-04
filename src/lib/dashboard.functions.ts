@@ -21,11 +21,26 @@ export const listLeadsFn = createServerFn({ method: "GET" }).handler(async () =>
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("leads")
-    .select("id,title,description,source,contact,ai_pitch,business_proposal,raw_social_data,status,budget,urgency,created_at")
+    .select("id,title,description,source,contact,ai_pitch,business_proposal,raw_social_data,status,validation_status,processing_status,budget,urgency,created_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw new Error(error.message);
   return data ?? [];
+});
+
+export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: cfg } = await supabaseAdmin
+    .from("scraper_config")
+    .select("id,sources,keywords,updated_at")
+    .eq("singleton", true)
+    .maybeSingle();
+  const { dispatchToN8n } = await import("@/lib/n8n.server");
+  const res = await dispatchToN8n({
+    type: "test",
+    data: { action: "trigger_live_scrape", config: cfg ?? null },
+  });
+  return { ok: res.ok, status: res.status, error: res.error };
 });
 
 export const requestProposalFn = createServerFn({ method: "POST" })
@@ -118,8 +133,12 @@ export const createLeadFn = createServerFn({ method: "POST" })
 
 // Quick ingest — accepts a URL or raw job description, auto-detects source.
 export const quickIngestFn = createServerFn({ method: "POST" })
-  .inputValidator((d: { input: string }) =>
-    z.object({ input: z.string().trim().min(3).max(8000) }).parse(d),
+  .inputValidator((d: { input: string; contact?: string | null; raw_social_data?: Record<string, unknown> | null }) =>
+    z.object({
+      input: z.string().trim().min(3).max(8000),
+      contact: z.string().max(2000).nullable().optional(),
+      raw_social_data: z.record(z.string(), z.unknown()).nullable().optional(),
+    }).parse(d),
   )
   .handler(async ({ data }) => {
     const raw = data.input.trim();
@@ -149,11 +168,18 @@ export const quickIngestFn = createServerFn({ method: "POST" })
       source = "paste";
     }
 
+    // client-parsed contact/raw_social_data override auto-detected values
+    const finalContact = data.contact && data.contact.trim() ? data.contact.trim() : contact;
+    const rawSocial = data.raw_social_data ?? null;
+    const contactStrong = Boolean(finalContact && finalContact.trim().length > 3);
+    const descStrong = (description ?? "").length >= 30;
+    const validation_status = contactStrong && descStrong ? "verified" : "invalid";
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("leads")
-      .insert({ title, description, source, contact, status: "pending" })
-      .select("id,title,description,source,contact,ai_pitch,status,created_at")
+      .insert({ title, description, source, contact: finalContact, raw_social_data: rawSocial as never, status: "pending", validation_status })
+      .select("id,title,description,source,contact,ai_pitch,status,validation_status,created_at")
       .single();
     if (error || !row) throw new Error(error?.message ?? "insert failed");
 

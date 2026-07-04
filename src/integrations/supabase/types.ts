@@ -25,12 +25,14 @@ export type Database = {
           email_error: string | null
           email_sent: boolean
           id: string
+          processing_status: string | null
           raw: Json | null
           raw_social_data: Json | null
           source: string
           status: string
           title: string
           urgency: string
+          validation_status: string
         }
         Insert: {
           ai_pitch?: string | null
@@ -42,12 +44,14 @@ export type Database = {
           email_error?: string | null
           email_sent?: boolean
           id?: string
+          processing_status?: string | null
           raw?: Json | null
           raw_social_data?: Json | null
           source?: string
           status?: string
           title: string
           urgency?: string
+          validation_status?: string
         }
         Update: {
           ai_pitch?: string | null
@@ -59,12 +63,14 @@ export type Database = {
           email_error?: string | null
           email_sent?: boolean
           id?: string
+          processing_status?: string | null
           raw?: Json | null
           raw_social_data?: Json | null
           source?: string
           status?: string
           title?: string
           urgency?: string
+          validation_status?: string
         }
         Relationships: []
       }
