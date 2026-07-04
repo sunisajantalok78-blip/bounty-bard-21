@@ -455,8 +455,12 @@ function LeadsPanel() {
               <div className="rounded-lg border border-border/60 bg-card/50 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{selected.title}</h3>
-                  <Badge>{selected.source}</Badge>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    <ValidationBadge contact={selected.contact} description={selected.description} status={selected.validation_status} />
+                    <Badge>{selected.source}</Badge>
+                  </div>
                 </div>
+                <ProcessingStepper status={selected.processing_status as ProcStep} />
                 {selected.description && (
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selected.description}</p>
                 )}
