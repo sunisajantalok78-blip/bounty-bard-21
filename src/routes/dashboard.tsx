@@ -351,6 +351,17 @@ function LeadsPanel() {
     },
   });
 
+  // Realtime: refetch leads whenever Supabase pushes any change (n8n writeback).
+  useEffect(() => {
+    const channel = supabase
+      .channel("leads-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
+        qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [qc]);
+
   const selected = leads.find((l) => l.id === selectedId) ?? leads[0];
 
   const copyPitch = async (id: string, text: string) => {
