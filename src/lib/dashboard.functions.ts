@@ -133,8 +133,12 @@ export const createLeadFn = createServerFn({ method: "POST" })
 
 // Quick ingest — accepts a URL or raw job description, auto-detects source.
 export const quickIngestFn = createServerFn({ method: "POST" })
-  .inputValidator((d: { input: string }) =>
-    z.object({ input: z.string().trim().min(3).max(8000) }).parse(d),
+  .inputValidator((d: { input: string; contact?: string | null; raw_social_data?: Record<string, unknown> | null }) =>
+    z.object({
+      input: z.string().trim().min(3).max(8000),
+      contact: z.string().max(2000).nullable().optional(),
+      raw_social_data: z.record(z.string(), z.unknown()).nullable().optional(),
+    }).parse(d),
   )
   .handler(async ({ data }) => {
     const raw = data.input.trim();
