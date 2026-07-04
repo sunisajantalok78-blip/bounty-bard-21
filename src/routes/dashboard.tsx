@@ -2,6 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   listLeadsFn,
   updateLeadStatusFn,
@@ -14,6 +15,7 @@ import {
   deletePortfolioFn,
   getScraperConfigFn,
   saveScraperConfigFn,
+  triggerGlobalScrapeFn,
   LEAD_STATUSES,
   type LeadStatus,
 } from "@/lib/dashboard.functions";
@@ -27,11 +29,95 @@ import { Switch } from "@/components/ui/switch";
 import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
-  Layers, ClipboardList, Rocket, Trophy,
+  Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+
+/* ---------- Client-side raw-data parser ---------- */
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const PHONE_RE = /(?:\+?\d[\d\s().-]{6,}\d)/g;
+const HANDLE_RE = /(?:^|[\s(])@([a-zA-Z0-9_.]{2,30})/g;
+const URL_RE = /https?:\/\/[^\s<>"']+/gi;
+export type ParsedContacts = {
+  emails: string[]; phones: string[]; handles: string[]; urls: string[];
+};
+export function parseRawContacts(text: string): ParsedContacts {
+  const emails = Array.from(new Set(text.match(EMAIL_RE) ?? []));
+  const phones = Array.from(new Set((text.match(PHONE_RE) ?? []).map((s) => s.trim()).filter((s) => s.replace(/\D/g, "").length >= 7)));
+  const handles = Array.from(new Set(Array.from(text.matchAll(HANDLE_RE)).map((m) => `@${m[1]}`)));
+  const urls = Array.from(new Set(text.match(URL_RE) ?? []));
+  return { emails, phones, handles, urls };
+}
+function pickPrimaryContact(p: ParsedContacts, fallback: string): string {
+  return p.emails[0] ?? p.phones[0] ?? p.urls[0] ?? p.handles[0] ?? fallback;
+}
+
+/* ---------- Processing status stepper ---------- */
+const PROCESSING_STEPS = [
+  { key: "scraping_profile",  label: "Scraping" },
+  { key: "validating_contact", label: "Validating" },
+  { key: "generating_pitch",  label: "Generating" },
+  { key: "success",           label: "Success" },
+] as const;
+type ProcStep = typeof PROCESSING_STEPS[number]["key"] | "failed" | null | undefined;
+
+function ProcessingStepper({ status }: { status: ProcStep }) {
+  if (!status) return null;
+  const failed = status === "failed";
+  const idx = failed ? -1 : PROCESSING_STEPS.findIndex((s) => s.key === status);
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-background/60 px-2 py-1.5 text-[11px]">
+      {failed ? (
+        <span className="flex items-center gap-1 text-rose-400">
+          <AlertTriangle className="h-3.5 w-3.5" /> n8n reported failure
+        </span>
+      ) : (
+        PROCESSING_STEPS.map((s, i) => {
+          const done = i < idx || status === "success";
+          const active = i === idx && status !== "success";
+          return (
+            <span key={s.key} className="flex items-center gap-1">
+              {active ? <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                : done ? <Check className="h-3 w-3 text-emerald-400" />
+                : <span className="h-2 w-2 rounded-full border border-border/60" />}
+              <span className={active ? "text-amber-300" : done ? "text-emerald-300" : "text-muted-foreground"}>{s.label}</span>
+              {i < PROCESSING_STEPS.length - 1 && <span className="opacity-40 mx-0.5">·</span>}
+            </span>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/* ---------- Validation badge ---------- */
+function ValidationBadge({ contact, description, status }: { contact: string | null; description: string | null; status?: string | null }) {
+  const missingContact = !contact || contact.trim().length < 4;
+  const shortDesc = (description ?? "").trim().length < 30;
+  const invalid = status === "invalid" || missingContact || shortDesc;
+  const verified = status === "verified" && !missingContact && !shortDesc;
+  const validating = status === "validating";
+  if (validating) {
+    return <span className="text-[10px] inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">
+      <Loader2 className="h-3 w-3 animate-spin" /> Validating
+    </span>;
+  }
+  if (invalid) {
+    return <span title={missingContact ? "No valid contact" : shortDesc ? "Description < 30 chars" : "Marked invalid"}
+      className="text-[10px] inline-flex items-center gap-1 rounded border border-rose-500/40 bg-rose-500/10 text-rose-300 px-1.5 py-0.5">
+      <ShieldAlert className="h-3 w-3" /> {missingContact ? "No contact" : shortDesc ? "Thin data" : "Invalid"}
+    </span>;
+  }
+  if (verified) {
+    return <span className="text-[10px] inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5">
+      <ShieldCheck className="h-3 w-3" /> Verified
+    </span>;
+  }
+  return null;
+}
+
 
 const leadsQO = () =>
   queryOptions({ queryKey: ["dash", "leads"], queryFn: () => listLeadsFn(), refetchInterval: 15000 });
