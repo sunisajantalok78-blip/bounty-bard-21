@@ -871,8 +871,6 @@ function ScraperPanel() {
           )}
         </section>
 
-        <div className="flex items-center justify-between border-t border-border/40 pt-3">
-          <span className="text-xs text-muted-foreground">
         <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <PlayCircle className="h-4 w-4 text-emerald-400" />
