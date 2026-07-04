@@ -168,11 +168,18 @@ export const quickIngestFn = createServerFn({ method: "POST" })
       source = "paste";
     }
 
+    // client-parsed contact/raw_social_data override auto-detected values
+    const finalContact = data.contact && data.contact.trim() ? data.contact.trim() : contact;
+    const rawSocial = data.raw_social_data ?? null;
+    const contactStrong = Boolean(finalContact && finalContact.trim().length > 3);
+    const descStrong = (description ?? "").length >= 30;
+    const validation_status = contactStrong && descStrong ? "verified" : "invalid";
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("leads")
-      .insert({ title, description, source, contact, status: "pending" })
-      .select("id,title,description,source,contact,ai_pitch,status,created_at")
+      .insert({ title, description, source, contact: finalContact, raw_social_data: rawSocial as never, status: "pending", validation_status })
+      .select("id,title,description,source,contact,ai_pitch,status,validation_status,created_at")
       .single();
     if (error || !row) throw new Error(error?.message ?? "insert failed");
 
