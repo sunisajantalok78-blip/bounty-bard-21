@@ -802,6 +802,9 @@ function ScraperPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
   });
 
+  const triggerFn = useServerFn(triggerGlobalScrapeFn);
+  const triggerMut = useMutation({ mutationFn: () => triggerFn() });
+
   const addKw = () => {
     const v = kwInput.trim();
     if (!v) return;
