@@ -873,6 +873,30 @@ function ScraperPanel() {
 
         <div className="flex items-center justify-between border-t border-border/40 pt-3">
           <span className="text-xs text-muted-foreground">
+        <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <PlayCircle className="h-4 w-4 text-emerald-400" />
+            <h4 className="text-sm font-medium">Master switch</h4>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Fire an immediate <code>trigger_live_scrape</code> command to n8n using the current source & keyword config.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              disabled={triggerMut.isPending}
+              onClick={() => triggerMut.mutate()}
+              className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
+            >
+              {triggerMut.isPending ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Dispatching…</>) : (<><PlayCircle className="h-4 w-4 mr-1" /> Trigger Global Scrape Now</>)}
+            </Button>
+            {triggerMut.data?.ok && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check className="h-3 w-3" /> Sent (HTTP {triggerMut.data.status ?? "?"})</span>}
+            {triggerMut.data && !triggerMut.data.ok && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {triggerMut.data.error ?? `HTTP ${triggerMut.data.status}`}</span>}
+          </div>
+        </section>
+
+        <div className="flex items-center justify-between border-t border-border/40 pt-3">
+          <span className="text-xs text-muted-foreground">
             Last updated: {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString() : "—"}
           </span>
           <Button disabled={saveMut.isPending} onClick={() => saveMut.mutate()} className="bg-gradient-to-r from-primary to-accent">
