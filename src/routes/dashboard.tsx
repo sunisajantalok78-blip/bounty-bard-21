@@ -437,9 +437,13 @@ function LeadsPanel() {
                         {hasProposal && <Zap className="h-3 w-3 text-amber-400" />}
                         {l.title}
                       </div>
-                      <div className="text-xs flex items-center gap-2 mt-0.5">
+                      <div className="text-xs flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-muted-foreground">{l.source}</span>
                         <span className={`text-[10px] rounded border px-1.5 py-0.5 ${STATUS_STYLES[st] ?? ""}`}>{st}</span>
+                        <ValidationBadge contact={l.contact} description={l.description} status={l.validation_status} />
+                        {l.processing_status && l.processing_status !== "success" && (
+                          <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                        )}
                       </div>
                     </button>
                   </li>
