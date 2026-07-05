@@ -888,8 +888,9 @@ function ScraperPanel() {
             >
               {triggerMut.isPending ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Dispatching…</>) : (<><PlayCircle className="h-4 w-4 mr-1" /> Trigger Global Scrape Now</>)}
             </Button>
-            {triggerMut.data?.ok && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check className="h-3 w-3" /> Sent (HTTP {triggerMut.data.status ?? "?"})</span>}
-            {triggerMut.data && !triggerMut.data.ok && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {triggerMut.data.error ?? `HTTP ${triggerMut.data.status}`}</span>}
+            {triggerMut.data?.ok && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check className="h-3 w-3" /> Inserted {triggerMut.data.inserted} lead{triggerMut.data.inserted === 1 ? "" : "s"} from {triggerMut.data.queries} querie{triggerMut.data.queries === 1 ? "" : "s"}</span>}
+            {triggerMut.data && !triggerMut.data.ok && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Scrape failed</span>}
+
           </div>
         </section>
 
