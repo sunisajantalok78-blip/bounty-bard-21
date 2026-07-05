@@ -237,28 +237,57 @@ export const quickIngestFn = createServerFn({ method: "POST" })
     // client-parsed contact/raw_social_data override auto-detected values
     const finalContact = data.contact && data.contact.trim() ? data.contact.trim() : contact;
     const rawSocial = data.raw_social_data ?? null;
-    const contactStrong = Boolean(finalContact && finalContact.trim().length > 3);
-    const descStrong = (description ?? "").length >= 30;
-    const validation_status = contactStrong && descStrong ? "verified" : "invalid";
-
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Insert as scraping_profile first, then validate → validating_contact → success/failed
+    const initialContact = data.contact && data.contact.trim() ? data.contact.trim() : contact;
     const { data: row, error } = await supabaseAdmin
       .from("leads")
-      .insert({ title, description, source, contact: finalContact, raw_social_data: rawSocial as never, status: "pending", validation_status })
-      .select("id,title,description,source,contact,ai_pitch,status,validation_status,created_at")
+      .insert({
+        title,
+        description,
+        source,
+        contact: initialContact,
+        raw_social_data: (data.raw_social_data ?? null) as never,
+        status: "pending",
+        validation_status: "pending",
+        processing_status: "scraping_profile",
+      })
+      .select("id,title,description,source,contact,ai_pitch,status,validation_status,processing_status,created_at")
       .single();
     if (error || !row) throw new Error(error?.message ?? "insert failed");
+
+    await supabaseAdmin.from("leads").update({ processing_status: "validating_contact" }).eq("id", row.id);
+
+    const { validateFromText } = await import("@/lib/scraper.server");
+    const validationText = `${description ?? ""}\n${initialContact ?? ""}`;
+    const v = await validateFromText(validationText, isUrl ? raw : null);
+    const finalProcessing = v.validation_status === "verified" ? "success" : "failed";
+    const finalStatus = v.validation_status === "verified" ? "pending" : "ignored";
+    const { data: updated } = await supabaseAdmin
+      .from("leads")
+      .update({
+        contact: v.contact ?? initialContact,
+        raw_social_data: v.raw_social_data as never,
+        validation_status: v.validation_status,
+        processing_status: finalProcessing,
+        status: finalStatus,
+      })
+      .eq("id", row.id)
+      .select("id,title,description,source,contact,ai_pitch,status,validation_status,processing_status,created_at")
+      .single();
 
     try {
       const { dispatchToN8n } = await import("@/lib/n8n.server");
       await dispatchToN8n({
         type: "lead.new",
-        data: { action: "new_manual_lead", lead_data: row },
+        data: { action: "new_manual_lead", lead_data: updated ?? row },
       });
     } catch { /* non-fatal */ }
 
-    return row;
+    return updated ?? row;
   });
+
 
 export const listPortfolioFn = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
