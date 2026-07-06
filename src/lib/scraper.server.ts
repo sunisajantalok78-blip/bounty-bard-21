@@ -111,3 +111,57 @@ export async function validateFromText(text: string, fallbackUrl?: string | null
     },
   };
 }
+
+// ---------- Portfolio-driven query builder ----------
+// Turns each my_portfolio row into a set of targeted client-intent search queries.
+export type PortfolioItem = { category: string; content: string };
+
+const INTENT_TEMPLATES = [
+  (kw: string) => `need ${kw} freelancer`,
+  (kw: string) => `hiring ${kw} specialist`,
+  (kw: string) => `looking for ${kw} expert`,
+  (kw: string) => `${kw} consultant wanted`,
+];
+
+const STOPWORDS = new Set([
+  "the","and","for","with","from","that","this","have","has","will","are","was","were","our","your","you","their","them","they","its","into","about","over","under","using","use","used","can","also","been","being","not","but","all","any","who","what","when","where","how","why","which","some","more","most","such","than","then","just","like","one","two","three","new","across","per","via","etc","inc","ltd","co",
+]);
+
+function extractKeywords(text: string, max = 4): string[] {
+  const cleaned = (text ?? "").toLowerCase().replace(/[^a-z0-9\s+#./-]/g, " ");
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  // Prefer multi-word noun-ish phrases: take bigrams of non-stopword tokens
+  const bigrams: string[] = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const a = tokens[i], b = tokens[i + 1];
+    if (a.length < 3 || b.length < 3) continue;
+    if (STOPWORDS.has(a) || STOPWORDS.has(b)) continue;
+    bigrams.push(`${a} ${b}`);
+  }
+  const unigrams = tokens.filter((t) => t.length >= 4 && !STOPWORDS.has(t));
+  const scored = new Map<string, number>();
+  for (const p of bigrams) scored.set(p, (scored.get(p) ?? 0) + 3);
+  for (const u of unigrams) scored.set(u, (scored.get(u) ?? 0) + 1);
+  return Array.from(scored.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([k]) => k);
+}
+
+export function buildPortfolioQueries(items: PortfolioItem[], perItem = 3): string[] {
+  const out = new Set<string>();
+  for (const it of items) {
+    const cat = (it.category ?? "").trim().toLowerCase();
+    const kws = extractKeywords(`${it.category} ${it.content}`, 4);
+    // Category itself is a strong seed
+    if (cat) {
+      for (const tpl of INTENT_TEMPLATES.slice(0, perItem)) out.add(tpl(cat));
+    }
+    for (const kw of kws.slice(0, perItem)) {
+      out.add(INTENT_TEMPLATES[0](kw));
+      out.add(INTENT_TEMPLATES[2](kw));
+    }
+  }
+  return Array.from(out);
+}
+

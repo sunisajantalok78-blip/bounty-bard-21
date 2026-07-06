@@ -35,31 +35,43 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
     .select("id,sources,keywords,updated_at")
     .eq("singleton", true)
     .maybeSingle();
-
-  const keywords: string[] = Array.isArray(cfg?.keywords) ? (cfg!.keywords as string[]) : [];
   const sources = (cfg?.sources ?? {}) as Record<string, boolean>;
 
-  const { jinaSearch, validateFromText } = await import("@/lib/scraper.server");
+  // Portfolio-driven queries — real data from my_portfolio, no static placeholders
+  const { data: portfolio } = await supabaseAdmin
+    .from("my_portfolio")
+    .select("category,content")
+    .order("created_at", { ascending: false })
+    .limit(20);
 
-  // Compose site-scoped queries for enabled sources; fall back to plain keyword search.
+  const { jinaSearch, validateFromText, buildPortfolioQueries } = await import("@/lib/scraper.server");
+
+  const baseQueries = buildPortfolioQueries(portfolio ?? [], 3);
+  if (baseQueries.length === 0) {
+    return { ok: false, inserted: 0, queries: 0, errors: ["my_portfolio is empty — add skills/case studies to drive the scraper"] };
+  }
+
+  // Optionally scope by enabled sources
   const siteFilters: string[] = [];
   if (sources.facebook) siteFilters.push("site:facebook.com");
   if (sources.instagram) siteFilters.push("site:instagram.com");
   if (sources.linkedin) siteFilters.push("site:linkedin.com");
-  // "google" == plain web search (no site filter)
+  const useSiteScope = siteFilters.length > 0 && !sources.google;
+
   const queries: string[] = [];
-  for (const kw of keywords.slice(0, 6)) {
-    if (sources.google || siteFilters.length === 0) queries.push(kw);
-    for (const s of siteFilters) queries.push(`${kw} ${s}`);
+  for (const q of baseQueries) {
+    if (!useSiteScope) queries.push(q);
+    for (const s of siteFilters) queries.push(`${q} ${s}`);
   }
 
   let inserted = 0;
+  let ignored = 0;
   const errors: string[] = [];
-  for (const q of queries.slice(0, 12)) {
+  for (const q of queries.slice(0, 16)) {
     const hits = await jinaSearch(q, 4);
     for (const h of hits) {
       if (!h.url) continue;
-      // dedupe by contact URL
+      // Strict dedupe against existing leads by contact URL
       const { data: existing } = await supabaseAdmin
         .from("leads")
         .select("id")
@@ -83,30 +95,26 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
         .single();
       if (error || !row) { errors.push(error?.message ?? "insert failed"); continue; }
 
-      // 2) validate → validating_contact
+      // 2) validate → validating_contact → success/failed
       await supabaseAdmin.from("leads").update({ processing_status: "validating_contact" }).eq("id", row.id);
       const v = await validateFromText(row.description ?? "", h.url);
-      const finalProcessing = v.validation_status === "verified" ? "success" : "failed";
-      const finalStatus = v.validation_status === "verified" ? "pending" : "ignored";
+      const verified = v.validation_status === "verified";
       await supabaseAdmin.from("leads").update({
         contact: v.contact ?? h.url,
         raw_social_data: v.raw_social_data as never,
         validation_status: v.validation_status,
-        processing_status: finalProcessing,
-        status: finalStatus,
+        processing_status: verified ? "success" : "failed",
+        // Safe execution: verified → pending (awaits manual "Generate Pro Proposal"); invalid → ignored
+        status: verified ? "pending" : "ignored",
       }).eq("id", row.id);
-      inserted += 1;
+      if (verified) inserted += 1; else ignored += 1;
     }
   }
 
-  // Notify n8n (best-effort) with the summary
-  try {
-    const { dispatchToN8n } = await import("@/lib/n8n.server");
-    await dispatchToN8n({ type: "test", data: { action: "trigger_live_scrape", config: cfg ?? null, inserted, queries } });
-  } catch { /* non-fatal */ }
-
-  return { ok: true, inserted, queries: queries.length, errors: errors.slice(0, 5) };
+  // Safe mode: do NOT fire any outbound n8n/webhook/email. Leads stop at "pending" for manual action.
+  return { ok: true, inserted, ignored, queries: queries.length, errors: errors.slice(0, 5) };
 });
+
 
 
 export const requestProposalFn = createServerFn({ method: "POST" })
