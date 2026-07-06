@@ -32,10 +32,13 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: cfg } = await supabaseAdmin
     .from("scraper_config")
-    .select("id,sources,keywords,updated_at")
+    .select("id,sources,keywords,intents,geo_target,max_results_per_query,updated_at")
     .eq("singleton", true)
     .maybeSingle();
   const sources = (cfg?.sources ?? {}) as Record<string, boolean>;
+  const intents = ((cfg?.intents ?? ["hiring", "freelance"]) as string[]);
+  const geoTarget = (cfg?.geo_target ?? "global") as string;
+  const maxPerQuery = Math.max(1, Math.min(50, Number(cfg?.max_results_per_query ?? 5)));
 
   // Portfolio-driven queries — real data from my_portfolio, no static placeholders
   const { data: portfolio } = await supabaseAdmin
@@ -44,7 +47,7 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
     .order("created_at", { ascending: false })
     .limit(20);
 
-  const { jinaSearch, validateFromText, buildPortfolioQueries } = await import("@/lib/scraper.server");
+  const { jinaSearch, validateFromText, buildPortfolioQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
 
   const baseQueries = buildPortfolioQueries(portfolio ?? [], 3);
   if (baseQueries.length === 0) {
@@ -53,22 +56,26 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
 
   // Optionally scope by enabled sources
   const siteFilters: string[] = [];
-  if (sources.facebook) siteFilters.push("site:facebook.com");
+  if (sources.facebook) siteFilters.push("site:facebook.com/groups");
   if (sources.instagram) siteFilters.push("site:instagram.com");
-  if (sources.linkedin) siteFilters.push("site:linkedin.com");
+  if (sources.linkedin) siteFilters.push("site:linkedin.com/jobs");
   const useSiteScope = siteFilters.length > 0 && !sources.google;
 
-  const queries: string[] = [];
+  const rawQueries: string[] = [];
   for (const q of baseQueries) {
-    if (!useSiteScope) queries.push(q);
-    for (const s of siteFilters) queries.push(`${q} ${s}`);
+    if (!useSiteScope) rawQueries.push(q);
+    for (const s of siteFilters) rawQueries.push(`${q} ${s}`);
   }
+
+  // Apply intent modifiers and geo/platform constraints to every query
+  const queries = applyIntentAndGeo(rawQueries, intents, geoTarget);
 
   let inserted = 0;
   let ignored = 0;
   const errors: string[] = [];
-  for (const q of queries.slice(0, 16)) {
-    const hits = await jinaSearch(q, 4);
+  for (const q of queries.slice(0, 24)) {
+    const hits = await jinaSearch(q, maxPerQuery);
+
     for (const h of hits) {
       if (!h.url) continue;
       // Strict dedupe against existing leads by contact URL
@@ -361,11 +368,18 @@ export type ScraperSources = {
   linkedin: boolean;
 };
 
+export const LEAD_INTENTS = ["hiring", "freelance", "pain_points"] as const;
+export type LeadIntent = (typeof LEAD_INTENTS)[number];
+export const GEO_TARGETS = ["global", "remote", "thailand", "usa", "europe"] as const;
+export type GeoTarget = (typeof GEO_TARGETS)[number];
+
+const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,updated_at";
+
 export const getScraperConfigFn = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("scraper_config")
-    .select("id,sources,keywords,updated_at")
+    .select(SCRAPER_COLS)
     .eq("singleton", true)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -373,14 +387,20 @@ export const getScraperConfigFn = createServerFn({ method: "GET" }).handler(asyn
   const { data: created, error: insErr } = await supabaseAdmin
     .from("scraper_config")
     .insert({ singleton: true })
-    .select("id,sources,keywords,updated_at")
+    .select(SCRAPER_COLS)
     .single();
   if (insErr || !created) throw new Error(insErr?.message ?? "init failed");
   return created;
 });
 
 export const saveScraperConfigFn = createServerFn({ method: "POST" })
-  .inputValidator((d: { sources: ScraperSources; keywords: string[] }) =>
+  .inputValidator((d: {
+    sources: ScraperSources;
+    keywords: string[];
+    intents: LeadIntent[];
+    geo_target: GeoTarget;
+    max_results_per_query: number;
+  }) =>
     z
       .object({
         sources: z.object({
@@ -390,6 +410,9 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           linkedin: z.boolean(),
         }),
         keywords: z.array(z.string().trim().min(1).max(80)).max(50),
+        intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length),
+        geo_target: z.enum(GEO_TARGETS),
+        max_results_per_query: z.number().int().min(1).max(50),
       })
       .parse(d),
   )
@@ -397,14 +420,18 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("scraper_config")
-      .update({ sources: data.sources, keywords: data.keywords, updated_at: new Date().toISOString() })
+      .update({
+        sources: data.sources,
+        keywords: data.keywords,
+        intents: data.intents,
+        geo_target: data.geo_target,
+        max_results_per_query: data.max_results_per_query,
+        updated_at: new Date().toISOString(),
+      })
       .eq("singleton", true)
-      .select("id,sources,keywords,updated_at")
+      .select(SCRAPER_COLS)
       .single();
     if (error || !row) throw new Error(error?.message ?? "update failed");
-    try {
-      const { dispatchToN8n } = await import("@/lib/n8n.server");
-      await dispatchToN8n({ type: "test", data: { action: "scraper_config_updated", config: row } });
-    } catch { /* non-fatal */ }
     return row;
   });
+

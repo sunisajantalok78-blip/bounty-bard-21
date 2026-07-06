@@ -165,3 +165,42 @@ export function buildPortfolioQueries(items: PortfolioItem[], perItem = 3): stri
   return Array.from(out);
 }
 
+// ---------- Intent & Geo modifiers ----------
+const INTENT_MODIFIERS: Record<string, string[]> = {
+  hiring: ["hiring", "job opening"],
+  freelance: ["freelance contract", "looking for freelancer"],
+  pain_points: ["struggling with", "problem with"],
+};
+
+const GEO_MODIFIERS: Record<string, string[]> = {
+  global: [],
+  remote: ["remote"],
+  thailand: ["Thailand", "Bangkok"],
+  usa: ["USA", "United States"],
+  europe: ["Europe", "EU"],
+};
+
+export function applyIntentAndGeo(queries: string[], intents: string[], geo: string): string[] {
+  const intentFrags = (intents ?? [])
+    .flatMap((i) => INTENT_MODIFIERS[i] ?? [])
+    .filter(Boolean);
+  const geoFrags = GEO_MODIFIERS[geo] ?? [];
+  if (intentFrags.length === 0 && geoFrags.length === 0) return queries;
+
+  const out = new Set<string>();
+  for (const q of queries) {
+    if (intentFrags.length === 0) {
+      for (const g of geoFrags) out.add(`${q} ${g}`);
+      if (geoFrags.length === 0) out.add(q);
+    } else {
+      for (const im of intentFrags) {
+        const base = `${im} ${q}`;
+        if (geoFrags.length === 0) out.add(base);
+        else for (const g of geoFrags) out.add(`${base} ${g}`);
+      }
+    }
+  }
+  return Array.from(out);
+}
+
+

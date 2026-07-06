@@ -17,7 +17,12 @@ import {
   saveScraperConfigFn,
   triggerGlobalScrapeFn,
   LEAD_STATUSES,
+  LEAD_INTENTS,
+  GEO_TARGETS,
   type LeadStatus,
+  type LeadIntent,
+  type GeoTarget,
+
 } from "@/lib/dashboard.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -796,11 +801,22 @@ function ScraperPanel() {
   });
   const [keywords, setKeywords] = useState<string[]>(cfg.keywords ?? []);
   const [kwInput, setKwInput] = useState("");
+  const cfgAny = cfg as unknown as {
+    intents?: LeadIntent[];
+    geo_target?: GeoTarget;
+    max_results_per_query?: number;
+  };
+  const [intents, setIntents] = useState<LeadIntent[]>(cfgAny.intents ?? ["hiring", "freelance"]);
+  const [geoTarget, setGeoTarget] = useState<GeoTarget>(cfgAny.geo_target ?? "global");
+  const [maxResults, setMaxResults] = useState<number>(cfgAny.max_results_per_query ?? 5);
 
   const saveMut = useMutation({
-    mutationFn: () => saveFn({ data: { sources, keywords } }),
+    mutationFn: () => saveFn({ data: {
+      sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults,
+    } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
   });
+
 
   const triggerFn = useServerFn(triggerGlobalScrapeFn);
   const triggerMut = useMutation({ mutationFn: () => triggerFn() });
@@ -870,6 +886,68 @@ function ScraperPanel() {
             </div>
           )}
         </section>
+
+        <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-4">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium">Intent & Geo Target Optimizer</h4>
+          </div>
+
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted-foreground">Lead intent</label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(LEAD_INTENTS as readonly LeadIntent[]).map((i) => {
+                const active = intents.includes(i);
+                const label = i === "hiring" ? "Hiring / Jobs" : i === "freelance" ? "Freelance / Contract" : "Pain Points";
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setIntents(active ? intents.filter((x) => x !== i) : [...intents, i])}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${active ? "border-primary bg-primary/15 text-primary" : "border-border/60 text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground">Geo / Platform target</label>
+              <select
+                value={geoTarget}
+                onChange={(e) => setGeoTarget(e.target.value as GeoTarget)}
+                className="mt-2 w-full h-9 rounded-md border border-border/60 bg-background px-2 text-sm"
+              >
+                {(GEO_TARGETS as readonly GeoTarget[]).map((g) => (
+                  <option key={g} value={g}>
+                    {g === "global" ? "Global" : g === "remote" ? "Remote" : g === "thailand" ? "Local / Thailand" : g === "usa" ? "USA" : "Europe"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center justify-between">
+                <span>Max results per query</span>
+                <span className="text-primary font-mono">{maxResults}</span>
+              </label>
+              <input
+                type="range"
+                min={5}
+                max={50}
+                step={1}
+                value={maxResults}
+                onChange={(e) => setMaxResults(Number(e.target.value))}
+                className="mt-3 w-full accent-primary"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per portfolio query to protect API usage.</p>
+            </div>
+          </div>
+        </section>
+
+
 
         <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
           <div className="flex items-center gap-2">
