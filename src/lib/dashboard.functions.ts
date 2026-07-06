@@ -32,10 +32,13 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: cfg } = await supabaseAdmin
     .from("scraper_config")
-    .select("id,sources,keywords,updated_at")
+    .select("id,sources,keywords,intents,geo_target,max_results_per_query,updated_at")
     .eq("singleton", true)
     .maybeSingle();
   const sources = (cfg?.sources ?? {}) as Record<string, boolean>;
+  const intents = ((cfg?.intents ?? ["hiring", "freelance"]) as string[]);
+  const geoTarget = (cfg?.geo_target ?? "global") as string;
+  const maxPerQuery = Math.max(1, Math.min(50, Number(cfg?.max_results_per_query ?? 5)));
 
   // Portfolio-driven queries — real data from my_portfolio, no static placeholders
   const { data: portfolio } = await supabaseAdmin
@@ -44,7 +47,7 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
     .order("created_at", { ascending: false })
     .limit(20);
 
-  const { jinaSearch, validateFromText, buildPortfolioQueries } = await import("@/lib/scraper.server");
+  const { jinaSearch, validateFromText, buildPortfolioQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
 
   const baseQueries = buildPortfolioQueries(portfolio ?? [], 3);
   if (baseQueries.length === 0) {
@@ -53,22 +56,26 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(
 
   // Optionally scope by enabled sources
   const siteFilters: string[] = [];
-  if (sources.facebook) siteFilters.push("site:facebook.com");
+  if (sources.facebook) siteFilters.push("site:facebook.com/groups");
   if (sources.instagram) siteFilters.push("site:instagram.com");
-  if (sources.linkedin) siteFilters.push("site:linkedin.com");
+  if (sources.linkedin) siteFilters.push("site:linkedin.com/jobs");
   const useSiteScope = siteFilters.length > 0 && !sources.google;
 
-  const queries: string[] = [];
+  const rawQueries: string[] = [];
   for (const q of baseQueries) {
-    if (!useSiteScope) queries.push(q);
-    for (const s of siteFilters) queries.push(`${q} ${s}`);
+    if (!useSiteScope) rawQueries.push(q);
+    for (const s of siteFilters) rawQueries.push(`${q} ${s}`);
   }
+
+  // Apply intent modifiers and geo/platform constraints to every query
+  const queries = applyIntentAndGeo(rawQueries, intents, geoTarget);
 
   let inserted = 0;
   let ignored = 0;
   const errors: string[] = [];
-  for (const q of queries.slice(0, 16)) {
-    const hits = await jinaSearch(q, 4);
+  for (const q of queries.slice(0, 24)) {
+    const hits = await jinaSearch(q, maxPerQuery);
+
     for (const h of hits) {
       if (!h.url) continue;
       // Strict dedupe against existing leads by contact URL
