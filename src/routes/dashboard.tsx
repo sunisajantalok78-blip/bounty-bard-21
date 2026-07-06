@@ -801,11 +801,22 @@ function ScraperPanel() {
   });
   const [keywords, setKeywords] = useState<string[]>(cfg.keywords ?? []);
   const [kwInput, setKwInput] = useState("");
+  const cfgAny = cfg as unknown as {
+    intents?: LeadIntent[];
+    geo_target?: GeoTarget;
+    max_results_per_query?: number;
+  };
+  const [intents, setIntents] = useState<LeadIntent[]>(cfgAny.intents ?? ["hiring", "freelance"]);
+  const [geoTarget, setGeoTarget] = useState<GeoTarget>(cfgAny.geo_target ?? "global");
+  const [maxResults, setMaxResults] = useState<number>(cfgAny.max_results_per_query ?? 5);
 
   const saveMut = useMutation({
-    mutationFn: () => saveFn({ data: { sources, keywords } }),
+    mutationFn: () => saveFn({ data: {
+      sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults,
+    } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
   });
+
 
   const triggerFn = useServerFn(triggerGlobalScrapeFn);
   const triggerMut = useMutation({ mutationFn: () => triggerFn() });
