@@ -122,24 +122,33 @@ export type Database = {
       scraper_config: {
         Row: {
           created_at: string
+          geo_target: string
           id: string
+          intents: string[]
           keywords: string[]
+          max_results_per_query: number
           singleton: boolean
           sources: Json
           updated_at: string
         }
         Insert: {
           created_at?: string
+          geo_target?: string
           id?: string
+          intents?: string[]
           keywords?: string[]
+          max_results_per_query?: number
           singleton?: boolean
           sources?: Json
           updated_at?: string
         }
         Update: {
           created_at?: string
+          geo_target?: string
           id?: string
+          intents?: string[]
           keywords?: string[]
+          max_results_per_query?: number
           singleton?: boolean
           sources?: Json
           updated_at?: string
