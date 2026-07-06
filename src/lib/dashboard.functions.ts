@@ -361,11 +361,18 @@ export type ScraperSources = {
   linkedin: boolean;
 };
 
+export const LEAD_INTENTS = ["hiring", "freelance", "pain_points"] as const;
+export type LeadIntent = (typeof LEAD_INTENTS)[number];
+export const GEO_TARGETS = ["global", "remote", "thailand", "usa", "europe"] as const;
+export type GeoTarget = (typeof GEO_TARGETS)[number];
+
+const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,updated_at";
+
 export const getScraperConfigFn = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("scraper_config")
-    .select("id,sources,keywords,updated_at")
+    .select(SCRAPER_COLS)
     .eq("singleton", true)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -373,14 +380,20 @@ export const getScraperConfigFn = createServerFn({ method: "GET" }).handler(asyn
   const { data: created, error: insErr } = await supabaseAdmin
     .from("scraper_config")
     .insert({ singleton: true })
-    .select("id,sources,keywords,updated_at")
+    .select(SCRAPER_COLS)
     .single();
   if (insErr || !created) throw new Error(insErr?.message ?? "init failed");
   return created;
 });
 
 export const saveScraperConfigFn = createServerFn({ method: "POST" })
-  .inputValidator((d: { sources: ScraperSources; keywords: string[] }) =>
+  .inputValidator((d: {
+    sources: ScraperSources;
+    keywords: string[];
+    intents: LeadIntent[];
+    geo_target: GeoTarget;
+    max_results_per_query: number;
+  }) =>
     z
       .object({
         sources: z.object({
@@ -390,6 +403,9 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           linkedin: z.boolean(),
         }),
         keywords: z.array(z.string().trim().min(1).max(80)).max(50),
+        intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length),
+        geo_target: z.enum(GEO_TARGETS),
+        max_results_per_query: z.number().int().min(1).max(50),
       })
       .parse(d),
   )
@@ -397,14 +413,18 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("scraper_config")
-      .update({ sources: data.sources, keywords: data.keywords, updated_at: new Date().toISOString() })
+      .update({
+        sources: data.sources,
+        keywords: data.keywords,
+        intents: data.intents,
+        geo_target: data.geo_target,
+        max_results_per_query: data.max_results_per_query,
+        updated_at: new Date().toISOString(),
+      })
       .eq("singleton", true)
-      .select("id,sources,keywords,updated_at")
+      .select(SCRAPER_COLS)
       .single();
     if (error || !row) throw new Error(error?.message ?? "update failed");
-    try {
-      const { dispatchToN8n } = await import("@/lib/n8n.server");
-      await dispatchToN8n({ type: "test", data: { action: "scraper_config_updated", config: row } });
-    } catch { /* non-fatal */ }
     return row;
   });
+
