@@ -580,16 +580,32 @@ function LeadsPanel() {
                     <Button
                       size="sm"
                       variant="default"
-                      disabled={proposalMut.isPending && proposalMut.variables === selected.id}
+                      disabled={
+                        (proposalMut.isPending && proposalMut.variables === selected.id) ||
+                        !gov.canGenerate
+                      }
                       onClick={() => proposalMut.mutate(selected.id)}
-                      className="bg-gradient-to-r from-primary to-accent"
+                      title={
+                        gov.capReached
+                          ? "Daily compliant outreach limit reached to prevent automated spamming."
+                          : gov.cooldownActive
+                            ? `Cooling down · ${Math.ceil(gov.cooldownRemainingMs / 1000)}s`
+                            : undefined
+                      }
+                      className="bg-gradient-to-r from-primary to-accent disabled:opacity-60"
                     >
-                      <Zap className="h-3.5 w-3.5 mr-1" />
+                      {gov.capReached ? <Ban className="h-3.5 w-3.5 mr-1" />
+                        : gov.cooldownActive ? <Clock className="h-3.5 w-3.5 mr-1 animate-pulse" />
+                        : <Zap className="h-3.5 w-3.5 mr-1" />}
                       {proposalMut.isPending && proposalMut.variables === selected.id
                         ? "Dispatching to n8n…"
-                        : selected.business_proposal
-                          ? "Regenerate Pro Proposal"
-                          : "Generate Pro Proposal"}
+                        : gov.capReached
+                          ? "Daily Limit Reached"
+                          : gov.cooldownActive
+                            ? `Cooling down · ${Math.ceil(gov.cooldownRemainingMs / 1000)}s`
+                            : selected.business_proposal
+                              ? "Regenerate Pro Proposal"
+                              : "Generate Pro Proposal"}
                     </Button>
                     {selected.business_proposal && (
                       <>
