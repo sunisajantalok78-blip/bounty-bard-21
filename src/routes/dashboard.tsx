@@ -402,9 +402,31 @@ function LeadsPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "leads"] }),
   });
 
+  const gov = usePitchGovernance();
   const proposalMut = useMutation({
-    mutationFn: (id: string) => requestProposal({ data: { id } }),
-    onSuccess: (_r, id) => {
+    mutationFn: async (id: string) => {
+      const gate = requestGeneration();
+      if (!gate.ok) {
+        if (gate.reason === "cap") {
+          toast.error("Daily compliant outreach limit reached to prevent automated spamming.", {
+            description: `${DAILY_PITCH_LIMIT}/${DAILY_PITCH_LIMIT} generations used in the last 24h.`,
+          });
+        } else {
+          toast.warning("Anti-bulk cooldown active", {
+            description: "Please process leads intentionally, one by one (10s throttle).",
+          });
+        }
+        throw new Error(gate.reason ?? "blocked");
+      }
+      const res = await requestProposal({ data: { id } });
+      if (res && (res as { skipped?: boolean }).skipped) {
+        refundGeneration();
+        toast.info("A compliant pitch already exists for this contact. Duplicate prevention active.");
+      }
+      return res;
+    },
+    onSuccess: (r, id) => {
+      if (r && (r as { skipped?: boolean }).skipped) return;
       setExpandedProposal((s) => ({ ...s, [id]: true }));
       qc.invalidateQueries({ queryKey: ["dash", "leads"] });
     },
