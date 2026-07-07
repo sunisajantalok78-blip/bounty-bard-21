@@ -36,7 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
-  Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle,
+  Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle, Clock, Ban,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
