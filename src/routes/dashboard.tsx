@@ -156,13 +156,16 @@ function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Lead Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
-          </p>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              Lead Dashboard
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
+            </p>
+          </div>
+          <GovernanceBadge />
         </header>
 
         <MetricsBar />
