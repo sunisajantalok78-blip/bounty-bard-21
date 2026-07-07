@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { usePitchGovernance, requestGeneration, refundGeneration, DAILY_PITCH_LIMIT } from "@/lib/pitch-governance";
-import { ShieldCheck as ShieldCheckIcon, Clock } from "lucide-react";
 import {
   listLeadsFn,
   updateLeadStatusFn,
