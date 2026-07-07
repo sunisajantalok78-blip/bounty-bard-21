@@ -2,7 +2,9 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { usePitchGovernance, requestGeneration, refundGeneration, DAILY_PITCH_LIMIT } from "@/lib/pitch-governance";
 import {
   listLeadsFn,
   updateLeadStatusFn,
@@ -34,7 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
-  Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle,
+  Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle, Clock, Ban,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
@@ -154,13 +156,16 @@ function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Lead Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
-          </p>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              Lead Dashboard
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
+            </p>
+          </div>
+          <GovernanceBadge />
         </header>
 
         <MetricsBar />
@@ -177,6 +182,55 @@ function DashboardPage() {
           <TabsContent value="scraper"><ScraperPanel /></TabsContent>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- Governance badge ---------------- */
+
+function GovernanceBadge() {
+  const g = usePitchGovernance();
+  const pct = Math.min(100, (g.used / g.limit) * 100);
+  const tone = g.capReached
+    ? "border-rose-500/50 bg-rose-500/10 text-rose-300"
+    : g.used >= g.limit * 0.8
+      ? "border-amber-500/50 bg-amber-500/10 text-amber-300"
+      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+  const secs = Math.ceil(g.cooldownRemainingMs / 1000);
+  return (
+    <div
+      title={
+        g.capReached
+          ? "Daily compliant outreach limit reached to prevent automated spamming."
+          : g.cooldownActive
+            ? `Anti-bulk cooldown active — next generation in ${secs}s`
+            : `Daily Outreach Budget: ${g.used} / ${g.limit} used (rolling 24h)`
+      }
+      className={`min-w-[220px] rounded-lg border px-3 py-2 ${tone}`}
+    >
+      <div className="flex items-center gap-2 text-xs">
+        {g.capReached ? <Ban className="h-3.5 w-3.5" />
+          : g.cooldownActive ? <Clock className="h-3.5 w-3.5 animate-pulse" />
+          : <ShieldCheck className="h-3.5 w-3.5" />}
+        <span className="font-medium uppercase tracking-wide">Daily Outreach Budget</span>
+        <span className="ml-auto tabular-nums font-mono">
+          {g.used} / {g.limit}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-background/60">
+        <div
+          className={`h-full transition-all ${g.capReached ? "bg-rose-500" : g.used >= g.limit * 0.8 ? "bg-amber-400" : "bg-emerald-400"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {g.cooldownActive && !g.capReached && (
+        <div className="mt-1 text-[10px] text-amber-300/90 flex items-center gap-1">
+          <Clock className="h-3 w-3" /> Cooling down · {secs}s
+        </div>
+      )}
+      {g.capReached && (
+        <div className="mt-1 text-[10px] text-rose-300/90">Limit reached · resets rolling 24h</div>
+      )}
     </div>
   );
 }
@@ -348,9 +402,31 @@ function LeadsPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "leads"] }),
   });
 
+  const gov = usePitchGovernance();
   const proposalMut = useMutation({
-    mutationFn: (id: string) => requestProposal({ data: { id } }),
-    onSuccess: (_r, id) => {
+    mutationFn: async (id: string) => {
+      const gate = requestGeneration();
+      if (!gate.ok) {
+        if (gate.reason === "cap") {
+          toast.error("Daily compliant outreach limit reached to prevent automated spamming.", {
+            description: `${DAILY_PITCH_LIMIT}/${DAILY_PITCH_LIMIT} generations used in the last 24h.`,
+          });
+        } else {
+          toast.warning("Anti-bulk cooldown active", {
+            description: "Please process leads intentionally, one by one (10s throttle).",
+          });
+        }
+        throw new Error(gate.reason ?? "blocked");
+      }
+      const res = await requestProposal({ data: { id } });
+      if (res && (res as { skipped?: boolean }).skipped) {
+        refundGeneration();
+        toast.info("A compliant pitch already exists for this contact. Duplicate prevention active.");
+      }
+      return res;
+    },
+    onSuccess: (r, id) => {
+      if (r && (r as { skipped?: boolean }).skipped) return;
       setExpandedProposal((s) => ({ ...s, [id]: true }));
       qc.invalidateQueries({ queryKey: ["dash", "leads"] });
     },
@@ -504,16 +580,32 @@ function LeadsPanel() {
                     <Button
                       size="sm"
                       variant="default"
-                      disabled={proposalMut.isPending && proposalMut.variables === selected.id}
+                      disabled={
+                        (proposalMut.isPending && proposalMut.variables === selected.id) ||
+                        !gov.canGenerate
+                      }
                       onClick={() => proposalMut.mutate(selected.id)}
-                      className="bg-gradient-to-r from-primary to-accent"
+                      title={
+                        gov.capReached
+                          ? "Daily compliant outreach limit reached to prevent automated spamming."
+                          : gov.cooldownActive
+                            ? `Cooling down · ${Math.ceil(gov.cooldownRemainingMs / 1000)}s`
+                            : undefined
+                      }
+                      className="bg-gradient-to-r from-primary to-accent disabled:opacity-60"
                     >
-                      <Zap className="h-3.5 w-3.5 mr-1" />
+                      {gov.capReached ? <Ban className="h-3.5 w-3.5 mr-1" />
+                        : gov.cooldownActive ? <Clock className="h-3.5 w-3.5 mr-1 animate-pulse" />
+                        : <Zap className="h-3.5 w-3.5 mr-1" />}
                       {proposalMut.isPending && proposalMut.variables === selected.id
                         ? "Dispatching to n8n…"
-                        : selected.business_proposal
-                          ? "Regenerate Pro Proposal"
-                          : "Generate Pro Proposal"}
+                        : gov.capReached
+                          ? "Daily Limit Reached"
+                          : gov.cooldownActive
+                            ? `Cooling down · ${Math.ceil(gov.cooldownRemainingMs / 1000)}s`
+                            : selected.business_proposal
+                              ? "Regenerate Pro Proposal"
+                              : "Generate Pro Proposal"}
                     </Button>
                     {selected.business_proposal && (
                       <>

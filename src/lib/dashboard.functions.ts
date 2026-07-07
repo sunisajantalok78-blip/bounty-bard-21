@@ -130,11 +130,25 @@ export const requestProposalFn = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: lead, error } = await supabaseAdmin
       .from("leads")
-      .select("id,title,description,source,contact,raw_social_data")
+      .select("id,title,description,source,contact,ai_pitch,business_proposal,status,raw_social_data")
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!lead) throw new Error("lead not found");
+
+    // Idempotency / duplicate-prevention pre-check
+    const alreadyHasPitch =
+      Boolean(lead.ai_pitch && String(lead.ai_pitch).trim()) ||
+      Boolean(lead.business_proposal && String(lead.business_proposal).trim());
+    const inFlight = lead.status === "generating" || lead.status === "ready";
+    if (alreadyHasPitch || inFlight) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: alreadyHasPitch ? "duplicate_pitch" : "in_flight",
+        status: lead.status,
+      } as const;
+    }
 
     await supabaseAdmin.from("leads").update({ status: "generating" }).eq("id", data.id);
 
@@ -143,7 +157,7 @@ export const requestProposalFn = createServerFn({ method: "POST" })
       type: "lead.new",
       data: { action: "generate_proposal", lead_id: lead.id, lead },
     });
-    return { ok: res.ok, status: res.status, error: res.error };
+    return { ok: res.ok, skipped: false, status: res.status, error: res.error } as const;
   });
 
 export const updateLeadStatusFn = createServerFn({ method: "POST" })
