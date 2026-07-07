@@ -186,6 +186,55 @@ function DashboardPage() {
   );
 }
 
+/* ---------------- Governance badge ---------------- */
+
+function GovernanceBadge() {
+  const g = usePitchGovernance();
+  const pct = Math.min(100, (g.used / g.limit) * 100);
+  const tone = g.capReached
+    ? "border-rose-500/50 bg-rose-500/10 text-rose-300"
+    : g.used >= g.limit * 0.8
+      ? "border-amber-500/50 bg-amber-500/10 text-amber-300"
+      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+  const secs = Math.ceil(g.cooldownRemainingMs / 1000);
+  return (
+    <div
+      title={
+        g.capReached
+          ? "Daily compliant outreach limit reached to prevent automated spamming."
+          : g.cooldownActive
+            ? `Anti-bulk cooldown active — next generation in ${secs}s`
+            : `Daily Outreach Budget: ${g.used} / ${g.limit} used (rolling 24h)`
+      }
+      className={`min-w-[220px] rounded-lg border px-3 py-2 ${tone}`}
+    >
+      <div className="flex items-center gap-2 text-xs">
+        {g.capReached ? <Ban className="h-3.5 w-3.5" />
+          : g.cooldownActive ? <Clock className="h-3.5 w-3.5 animate-pulse" />
+          : <ShieldCheck className="h-3.5 w-3.5" />}
+        <span className="font-medium uppercase tracking-wide">Daily Outreach Budget</span>
+        <span className="ml-auto tabular-nums font-mono">
+          {g.used} / {g.limit}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-background/60">
+        <div
+          className={`h-full transition-all ${g.capReached ? "bg-rose-500" : g.used >= g.limit * 0.8 ? "bg-amber-400" : "bg-emerald-400"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {g.cooldownActive && !g.capReached && (
+        <div className="mt-1 text-[10px] text-amber-300/90 flex items-center gap-1">
+          <Clock className="h-3 w-3" /> Cooling down · {secs}s
+        </div>
+      )}
+      {g.capReached && (
+        <div className="mt-1 text-[10px] text-rose-300/90">Limit reached · resets rolling 24h</div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Metrics ---------------- */
 
 function MetricsBar() {
