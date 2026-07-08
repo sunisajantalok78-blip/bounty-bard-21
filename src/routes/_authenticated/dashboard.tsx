@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -133,7 +133,7 @@ const portfolioQO = () =>
 const scraperQO = () =>
   queryOptions({ queryKey: ["dash", "scraper"], queryFn: () => getScraperConfigFn() });
 
-export const Route = createFileRoute("/dashboard")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
       { title: "Lead Dashboard · Bounty Hunter" },
@@ -152,6 +152,38 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
+function DashboardUserMenu() {
+  const nav = useRouter().navigate;
+  const qc = useQueryClient();
+  const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      setEmail(data.user?.email ?? null);
+      if (!data.user) return;
+      const { data: adm } = await supabase.rpc("has_role", { _user_id: data.user.id, _role: "admin" });
+      setIsAdmin(Boolean(adm));
+    });
+  }, []);
+  async function signOut() {
+    await qc.cancelQueries();
+    qc.clear();
+    await supabase.auth.signOut();
+    nav({ to: "/auth", replace: true });
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {isAdmin && (
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin"><ShieldCheck className="h-4 w-4 mr-2" /> Admin room</Link>
+        </Button>
+      )}
+      <div className="hidden md:block text-xs text-muted-foreground max-w-[160px] truncate">{email}</div>
+      <Button variant="outline" size="sm" onClick={signOut}>Sign out</Button>
+    </div>
+  );
+}
+
 function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -165,8 +197,12 @@ function DashboardPage() {
               Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
             </p>
           </div>
-          <GovernanceBadge />
+          <div className="flex items-center gap-2">
+            <GovernanceBadge />
+            <DashboardUserMenu />
+          </div>
         </header>
+
 
         <MetricsBar />
         <QuickIngest />
