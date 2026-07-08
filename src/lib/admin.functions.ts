@@ -29,7 +29,7 @@ export const getAdminStatsFn = createServerFn({ method: "GET" })
         supabaseAdmin.from("leads").select("id", { count: "exact", head: true }).eq("validation_status", "success"),
         supabaseAdmin.from("leads").select("id", { count: "exact", head: true }).eq("validation_status", "failed"),
         supabaseAdmin.from("my_portfolio").select("id", { count: "exact", head: true }),
-        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 }),
+        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
         supabaseAdmin.from("scraper_config").select("*").limit(1).maybeSingle(),
       ]);
 
@@ -39,7 +39,7 @@ export const getAdminStatsFn = createServerFn({ method: "GET" })
       leadsSuccess: leadsSuccess.count ?? 0,
       leadsFailed: leadsFailed.count ?? 0,
       portfolioTotal: portfolio.count ?? 0,
-      usersTotal: users.data?.total ?? 0,
+      usersTotal: users.data?.users?.length ?? 0,
       config: cfg.data,
       generatedAt: new Date().toISOString(),
     };

@@ -13,6 +13,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as ApiPublicUserEventsRouteImport } from './routes/api/public/user-events'
 import { Route as ApiPublicIncomingLeadRouteImport } from './routes/api/public/incoming-lead'
 
 const AuthRoute = AuthRouteImport.update({
@@ -34,6 +36,16 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiPublicUserEventsRoute = ApiPublicUserEventsRouteImport.update({
+  id: '/api/public/user-events',
+  path: '/api/public/user-events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicIncomingLeadRoute = ApiPublicIncomingLeadRouteImport.update({
   id: '/api/public/incoming-lead',
   path: '/api/public/incoming-lead',
@@ -43,35 +55,55 @@ const ApiPublicIncomingLeadRoute = ApiPublicIncomingLeadRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/api/public/incoming-lead': typeof ApiPublicIncomingLeadRoute
+  '/api/public/user-events': typeof ApiPublicUserEventsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/api/public/incoming-lead': typeof ApiPublicIncomingLeadRoute
+  '/api/public/user-events': typeof ApiPublicUserEventsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/api/public/incoming-lead': typeof ApiPublicIncomingLeadRoute
+  '/api/public/user-events': typeof ApiPublicUserEventsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard' | '/api/public/incoming-lead'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/dashboard'
+    | '/api/public/incoming-lead'
+    | '/api/public/user-events'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/api/public/incoming-lead'
+  to:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/dashboard'
+    | '/api/public/incoming-lead'
+    | '/api/public/user-events'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/admin'
     | '/_authenticated/dashboard'
     | '/api/public/incoming-lead'
+    | '/api/public/user-events'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -79,6 +111,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiPublicIncomingLeadRoute: typeof ApiPublicIncomingLeadRoute
+  ApiPublicUserEventsRoute: typeof ApiPublicUserEventsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -111,6 +144,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/user-events': {
+      id: '/api/public/user-events'
+      path: '/api/public/user-events'
+      fullPath: '/api/public/user-events'
+      preLoaderRoute: typeof ApiPublicUserEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/incoming-lead': {
       id: '/api/public/incoming-lead'
       path: '/api/public/incoming-lead'
@@ -122,10 +169,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
 }
 
@@ -137,6 +186,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiPublicIncomingLeadRoute: ApiPublicIncomingLeadRoute,
+  ApiPublicUserEventsRoute: ApiPublicUserEventsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
