@@ -104,18 +104,21 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          user_id: string | null
         }
         Insert: {
           category: string
           content: string
           created_at?: string
           id?: string
+          user_id?: string | null
         }
         Update: {
           category?: string
           content?: string
           created_at?: string
           id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -130,6 +133,7 @@ export type Database = {
           singleton: boolean
           sources: Json
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -141,6 +145,7 @@ export type Database = {
           singleton?: boolean
           sources?: Json
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -152,6 +157,7 @@ export type Database = {
           singleton?: boolean
           sources?: Json
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
