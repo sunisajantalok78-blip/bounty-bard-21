@@ -152,6 +152,38 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
 });
 
+function DashboardUserMenu() {
+  const nav = useRouter().navigate;
+  const qc = useQueryClient();
+  const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      setEmail(data.user?.email ?? null);
+      if (!data.user) return;
+      const { data: adm } = await supabase.rpc("has_role", { _user_id: data.user.id, _role: "admin" });
+      setIsAdmin(Boolean(adm));
+    });
+  }, []);
+  async function signOut() {
+    await qc.cancelQueries();
+    qc.clear();
+    await supabase.auth.signOut();
+    nav({ to: "/auth", replace: true });
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {isAdmin && (
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin"><ShieldCheck className="h-4 w-4 mr-2" /> Admin room</Link>
+        </Button>
+      )}
+      <div className="hidden md:block text-xs text-muted-foreground max-w-[160px] truncate">{email}</div>
+      <Button variant="outline" size="sm" onClick={signOut}>Sign out</Button>
+    </div>
+  );
+}
+
 function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
