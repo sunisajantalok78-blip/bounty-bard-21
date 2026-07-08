@@ -30,24 +30,28 @@ export const listLeadsFn = createServerFn({ method: "GET" }).handler(async () =>
   return data ?? [];
 });
 
-export const triggerGlobalScrapeFn = createServerFn({ method: "POST" }).handler(async () => {
+export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: cfg } = await supabaseAdmin
+  const { data: cfg } = await context.supabase
     .from("scraper_config")
     .select("id,sources,keywords,intents,geo_target,max_results_per_query,updated_at")
-    .eq("singleton", true)
+    .eq("user_id", context.userId)
     .maybeSingle();
   const sources = (cfg?.sources ?? {}) as Record<string, boolean>;
   const intents = ((cfg?.intents ?? ["hiring", "freelance"]) as string[]);
   const geoTarget = (cfg?.geo_target ?? "global") as string;
   const maxPerQuery = Math.max(1, Math.min(50, Number(cfg?.max_results_per_query ?? 5)));
 
-  // Portfolio-driven queries — real data from my_portfolio, no static placeholders
-  const { data: portfolio } = await supabaseAdmin
+  // Portfolio-driven queries — real data from THIS user's my_portfolio
+  const { data: portfolio } = await context.supabase
     .from("my_portfolio")
     .select("category,content")
+    .eq("user_id", context.userId)
     .order("created_at", { ascending: false })
     .limit(20);
+
 
   const { jinaSearch, validateFromText, buildPortfolioQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
 
