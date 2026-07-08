@@ -37,8 +37,8 @@ function LandingPage() {
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link to="/dashboard">
-              <Sparkles className="h-4 w-4 mr-2" /> Trigger a Scrape
+            <Link to="/auth">
+              <Sparkles className="h-4 w-4 mr-2" /> Sign in / Sign up
             </Link>
           </Button>
         </div>
