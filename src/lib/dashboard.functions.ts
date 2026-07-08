@@ -324,25 +324,27 @@ export const quickIngestFn = createServerFn({ method: "POST" })
   });
 
 
-export const listPortfolioFn = createServerFn({ method: "GET" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("my_portfolio")
-    .select("id,category,content,created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data ?? [];
-});
+export const listPortfolioFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("my_portfolio")
+      .select("id,category,content,created_at")
+      .eq("user_id", context.userId)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
 
 export const addPortfolioFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: { category: string; content: string }) =>
     z.object({ category: z.string().min(1).max(120), content: z.string().min(1).max(8000) }).parse(d),
   )
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
+  .handler(async ({ data, context }) => {
+    const { data: row, error } = await context.supabase
       .from("my_portfolio")
-      .insert(data)
+      .insert({ ...data, user_id: context.userId })
       .select("id,category,content,created_at")
       .single();
     if (error || !row) throw new Error(error?.message ?? "insert failed");
@@ -350,6 +352,7 @@ export const addPortfolioFn = createServerFn({ method: "POST" })
   });
 
 export const updatePortfolioFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string; category: string; content: string }) =>
     z
       .object({
@@ -359,12 +362,12 @@ export const updatePortfolioFn = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
+  .handler(async ({ data, context }) => {
+    const { data: row, error } = await context.supabase
       .from("my_portfolio")
       .update({ category: data.category, content: data.content })
       .eq("id", data.id)
+      .eq("user_id", context.userId)
       .select("id,category,content,created_at")
       .single();
     if (error || !row) throw new Error(error?.message ?? "update failed");
@@ -372,15 +375,19 @@ export const updatePortfolioFn = createServerFn({ method: "POST" })
   });
 
 export const deletePortfolioFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("my_portfolio").delete().eq("id", data.id);
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("my_portfolio")
+      .delete()
+      .eq("id", data.id)
+      .eq("user_id", context.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
 
-// ---------- Scraper config ----------
+// ---------- Scraper config (per-user) ----------
 export type ScraperSources = {
   facebook: boolean;
   instagram: boolean;
@@ -395,25 +402,27 @@ export type GeoTarget = (typeof GEO_TARGETS)[number];
 
 const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,updated_at";
 
-export const getScraperConfigFn = createServerFn({ method: "GET" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("scraper_config")
-    .select(SCRAPER_COLS)
-    .eq("singleton", true)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (data) return data;
-  const { data: created, error: insErr } = await supabaseAdmin
-    .from("scraper_config")
-    .insert({ singleton: true })
-    .select(SCRAPER_COLS)
-    .single();
-  if (insErr || !created) throw new Error(insErr?.message ?? "init failed");
-  return created;
-});
+export const getScraperConfigFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("scraper_config")
+      .select(SCRAPER_COLS)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (data) return data;
+    const { data: created, error: insErr } = await context.supabase
+      .from("scraper_config")
+      .insert({ user_id: context.userId })
+      .select(SCRAPER_COLS)
+      .single();
+    if (insErr || !created) throw new Error(insErr?.message ?? "init failed");
+    return created;
+  });
 
 export const saveScraperConfigFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: {
     sources: ScraperSources;
     keywords: string[];
@@ -436,22 +445,26 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
+  .handler(async ({ data, context }) => {
+    // Upsert to ensure the user always has exactly one config row.
+    const { data: row, error } = await context.supabase
       .from("scraper_config")
-      .update({
-        sources: data.sources,
-        keywords: data.keywords,
-        intents: data.intents,
-        geo_target: data.geo_target,
-        max_results_per_query: data.max_results_per_query,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("singleton", true)
+      .upsert(
+        {
+          user_id: context.userId,
+          sources: data.sources,
+          keywords: data.keywords,
+          intents: data.intents,
+          geo_target: data.geo_target,
+          max_results_per_query: data.max_results_per_query,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      )
       .select(SCRAPER_COLS)
       .single();
-    if (error || !row) throw new Error(error?.message ?? "update failed");
+    if (error || !row) throw new Error(error?.message ?? "save failed");
     return row;
+
   });
 
