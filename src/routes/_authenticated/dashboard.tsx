@@ -165,8 +165,12 @@ function DashboardPage() {
               Ingest leads · AI pitches · portfolio · scraper controls. Every insert fires your n8n webhook.
             </p>
           </div>
-          <GovernanceBadge />
+          <div className="flex items-center gap-2">
+            <GovernanceBadge />
+            <DashboardUserMenu />
+          </div>
         </header>
+
 
         <MetricsBar />
         <QuickIngest />
