@@ -1,8 +1,10 @@
 // Server functions for the dashboard: leads, my_portfolio, scraper_config.
-// Uses Lovable Cloud Supabase (service role) since the app has no per-user auth.
+// Portfolio + scraper config are per-user (RLS scoped); leads remain shared.
 // Every new lead insert fires the outbound n8n webhook.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
 
 export const LEAD_STATUSES = [
   "pending",
