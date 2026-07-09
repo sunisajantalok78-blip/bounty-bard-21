@@ -125,7 +125,21 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
     }
   }
 
-  // Safe mode: do NOT fire any outbound n8n/webhook/email. Leads stop at "pending" for manual action.
+  // Notify n8n workflow with scrape summary (per-user URL if set, else env fallback).
+  try {
+    const { dispatchToN8n } = await import("@/lib/n8n.server");
+    await dispatchToN8n(
+      {
+        type: "test",
+        data: {
+          action: "trigger_live_scrape",
+          config: { sources, intents, geo_target: geoTarget, max_results_per_query: maxPerQuery, keyword_count: baseQueries.length },
+          result: { inserted, ignored, queries: queries.length },
+        },
+      },
+      n8nUrl,
+    );
+  } catch { /* non-fatal */ }
   return { ok: true, inserted, ignored, queries: queries.length, errors: errors.slice(0, 5) };
 });
 
