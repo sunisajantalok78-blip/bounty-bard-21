@@ -1227,7 +1227,14 @@ function ScraperPanel() {
           <span className="text-xs text-muted-foreground">
             Last updated: {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString() : "—"}
           </span>
-          <Button disabled={saveMut.isPending} onClick={() => saveMut.mutate()} className="bg-gradient-to-r from-primary to-accent">
+          <Button
+            disabled={saveMut.isPending || !n8nValid}
+            onClick={() => {
+              if (!n8nValid) { toast.error(n8nError ?? "Fix the webhook URL first"); return; }
+              saveMut.mutate();
+            }}
+            className="bg-gradient-to-r from-primary to-accent"
+          >
             {saveMut.isPending ? "Saving…" : "Save config → n8n"}
           </Button>
         </div>
