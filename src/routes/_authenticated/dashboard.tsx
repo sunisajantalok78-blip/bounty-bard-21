@@ -1109,7 +1109,51 @@ function ScraperPanel() {
               <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per portfolio query to protect API usage.</p>
             </div>
           </div>
+
+        <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Radio className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium">n8n webhook</h4>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Your personal n8n Webhook URL (POST). Leave blank to fall back to the workspace default.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="https://your-n8n.example.com/webhook/…"
+              value={n8nUrl}
+              onChange={(e) => setN8nUrl(e.target.value)}
+            />
+            <Button type="button" variant="outline" size="sm" disabled={testMut.isPending} onClick={() => testMut.mutate()}>
+              {testMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test"}
+            </Button>
+          </div>
         </section>
+
+        <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium">Import / Export settings</h4>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={exportConfig}>
+              <Save className="h-4 w-4 mr-1" /> Export JSON
+            </Button>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) importConfig(f); e.currentTarget.value = ""; }}
+              />
+              <span className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border border-border/60 hover:bg-muted cursor-pointer">
+                <Plus className="h-4 w-4" /> Import JSON
+              </span>
+            </label>
+          </div>
+        </section>
+
+
 
 
 
