@@ -1142,12 +1142,32 @@ function ScraperPanel() {
               placeholder="https://your-n8n.example.com/webhook/…"
               value={n8nUrl}
               onChange={(e) => setN8nUrl(e.target.value)}
+              aria-invalid={!n8nValid}
+              className={!n8nValid ? "border-rose-500 focus-visible:ring-rose-500" : undefined}
             />
-            <Button type="button" variant="outline" size="sm" disabled={testMut.isPending} onClick={() => testMut.mutate()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testMut.isPending || !n8nValid || !trimmedN8n}
+              onClick={() => {
+                if (!n8nValid) { toast.error(n8nError ?? "Invalid webhook URL"); return; }
+                testMut.mutate();
+              }}
+            >
               {testMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test"}
             </Button>
           </div>
+          {n8nError && (
+            <p className="text-xs text-rose-400 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" /> {n8nError}
+            </p>
+          )}
+          {!trimmedN8n && (
+            <p className="text-[11px] text-muted-foreground">No personal URL set — dispatches use the workspace default.</p>
+          )}
         </section>
+
 
         <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-2">
           <div className="flex items-center gap-2">
