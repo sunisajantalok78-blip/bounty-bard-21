@@ -11,13 +11,13 @@ export type N8nEvent =
   | { type: "audit.refreshed"; data: unknown }
   | { type: "test"; data: unknown };
 
-export async function dispatchToN8n(event: N8nEvent): Promise<{
+export async function dispatchToN8n(event: N8nEvent, overrideUrl?: string | null): Promise<{
   ok: boolean;
   status?: number;
   response?: string | null;
   error?: string;
 }> {
-  const url = process.env.N8N_WEBHOOK_URL;
+  const url = (overrideUrl && overrideUrl.trim()) || process.env.N8N_WEBHOOK_URL;
   if (!url) return { ok: false, error: "N8N_WEBHOOK_URL not configured" };
 
   const payload = {
