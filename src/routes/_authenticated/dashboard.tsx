@@ -934,21 +934,56 @@ function ScraperPanel() {
     intents?: LeadIntent[];
     geo_target?: GeoTarget;
     max_results_per_query?: number;
+    n8n_webhook_url?: string | null;
   };
   const [intents, setIntents] = useState<LeadIntent[]>(cfgAny.intents ?? ["hiring", "freelance"]);
   const [geoTarget, setGeoTarget] = useState<GeoTarget>(cfgAny.geo_target ?? "global");
   const [maxResults, setMaxResults] = useState<number>(cfgAny.max_results_per_query ?? 5);
+  const [n8nUrl, setN8nUrl] = useState<string>(cfgAny.n8n_webhook_url ?? "");
 
   const saveMut = useMutation({
     mutationFn: () => saveFn({ data: {
       sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults,
+      n8n_webhook_url: n8nUrl.trim() ? n8nUrl.trim() : null,
     } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
+    onSuccess: () => { toast.success("Config saved"); qc.invalidateQueries({ queryKey: ["dash", "scraper"] }); },
+    onError: (e: Error) => toast.error(e.message || "Save failed"),
   });
 
+  const testFn = useServerFn(testN8nWebhookFn);
+  const testMut = useMutation({
+    mutationFn: () => testFn(),
+    onSuccess: (r) => r.ok ? toast.success(`n8n responded ${r.status ?? "OK"}`) : toast.error(`n8n test failed: ${r.error ?? r.status}`),
+  });
 
   const triggerFn = useServerFn(triggerGlobalScrapeFn);
   const triggerMut = useMutation({ mutationFn: () => triggerFn() });
+
+  const exportConfig = () => {
+    const payload = { sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults, n8n_webhook_url: n8nUrl || null, exported_at: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `scraper-config-${new Date().toISOString().slice(0,10)}.json`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Config exported");
+  };
+  const importConfig = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const p = JSON.parse(String(reader.result));
+        if (p.sources) setSources({ facebook: !!p.sources.facebook, instagram: !!p.sources.instagram, google: !!p.sources.google, linkedin: !!p.sources.linkedin });
+        if (Array.isArray(p.keywords)) setKeywords(p.keywords.filter((k: unknown) => typeof k === "string"));
+        if (Array.isArray(p.intents)) setIntents(p.intents);
+        if (typeof p.geo_target === "string") setGeoTarget(p.geo_target);
+        if (typeof p.max_results_per_query === "number") setMaxResults(p.max_results_per_query);
+        if (typeof p.n8n_webhook_url === "string") setN8nUrl(p.n8n_webhook_url);
+        toast.success("Config imported — click Save to persist");
+      } catch { toast.error("Invalid config file"); }
+    };
+    reader.readAsText(file);
+  };
 
   const addKw = () => {
     const v = kwInput.trim();
