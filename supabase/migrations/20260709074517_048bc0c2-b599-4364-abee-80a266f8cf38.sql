@@ -1,0 +1,1 @@
+ALTER TABLE public.scraper_config ADD COLUMN IF NOT EXISTS n8n_webhook_url text;

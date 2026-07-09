@@ -36,13 +36,14 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: cfg } = await context.supabase
     .from("scraper_config")
-    .select("id,sources,keywords,intents,geo_target,max_results_per_query,updated_at")
+    .select("id,sources,keywords,intents,geo_target,max_results_per_query,n8n_webhook_url,updated_at")
     .eq("user_id", context.userId)
     .maybeSingle();
   const sources = (cfg?.sources ?? {}) as Record<string, boolean>;
   const intents = ((cfg?.intents ?? ["hiring", "freelance"]) as string[]);
   const geoTarget = (cfg?.geo_target ?? "global") as string;
   const maxPerQuery = Math.max(1, Math.min(50, Number(cfg?.max_results_per_query ?? 5)));
+  const n8nUrl = (cfg?.n8n_webhook_url ?? null) as string | null;
 
   // Portfolio-driven queries — real data from THIS user's my_portfolio
   const { data: portfolio } = await context.supabase
@@ -124,7 +125,21 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
     }
   }
 
-  // Safe mode: do NOT fire any outbound n8n/webhook/email. Leads stop at "pending" for manual action.
+  // Notify n8n workflow with scrape summary (per-user URL if set, else env fallback).
+  try {
+    const { dispatchToN8n } = await import("@/lib/n8n.server");
+    await dispatchToN8n(
+      {
+        type: "test",
+        data: {
+          action: "trigger_live_scrape",
+          config: { sources, intents, geo_target: geoTarget, max_results_per_query: maxPerQuery, keyword_count: baseQueries.length },
+          result: { inserted, ignored, queries: queries.length },
+        },
+      },
+      n8nUrl,
+    );
+  } catch { /* non-fatal */ }
   return { ok: true, inserted, ignored, queries: queries.length, errors: errors.slice(0, 5) };
 });
 
@@ -400,7 +415,7 @@ export type LeadIntent = (typeof LEAD_INTENTS)[number];
 export const GEO_TARGETS = ["global", "remote", "thailand", "usa", "europe"] as const;
 export type GeoTarget = (typeof GEO_TARGETS)[number];
 
-const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,updated_at";
+const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,n8n_webhook_url,updated_at";
 
 export const getScraperConfigFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -429,6 +444,7 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
     intents: LeadIntent[];
     geo_target: GeoTarget;
     max_results_per_query: number;
+    n8n_webhook_url?: string | null;
   }) =>
     z
       .object({
@@ -442,11 +458,18 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
         intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length),
         geo_target: z.enum(GEO_TARGETS),
         max_results_per_query: z.number().int().min(1).max(50),
+        n8n_webhook_url: z
+          .string()
+          .trim()
+          .max(500)
+          .url()
+          .nullable()
+          .optional()
+          .or(z.literal("").transform(() => null)),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    // Upsert to ensure the user always has exactly one config row.
     const { data: row, error } = await context.supabase
       .from("scraper_config")
       .upsert(
@@ -457,6 +480,7 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           intents: data.intents,
           geo_target: data.geo_target,
           max_results_per_query: data.max_results_per_query,
+          n8n_webhook_url: data.n8n_webhook_url ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" },
@@ -465,6 +489,21 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
       .single();
     if (error || !row) throw new Error(error?.message ?? "save failed");
     return row;
+  });
 
+// Test the configured n8n webhook (per-user URL if set, else env fallback)
+export const testN8nWebhookFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: cfg } = await context.supabase
+      .from("scraper_config")
+      .select("n8n_webhook_url")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const { dispatchToN8n } = await import("@/lib/n8n.server");
+    return dispatchToN8n(
+      { type: "test", data: { from: "scraper_panel", at: new Date().toISOString() } },
+      cfg?.n8n_webhook_url ?? null,
+    );
   });
 

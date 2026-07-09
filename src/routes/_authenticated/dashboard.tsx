@@ -18,6 +18,7 @@ import {
   getScraperConfigFn,
   saveScraperConfigFn,
   triggerGlobalScrapeFn,
+  testN8nWebhookFn,
   LEAD_STATUSES,
   LEAD_INTENTS,
   GEO_TARGETS,
@@ -933,21 +934,56 @@ function ScraperPanel() {
     intents?: LeadIntent[];
     geo_target?: GeoTarget;
     max_results_per_query?: number;
+    n8n_webhook_url?: string | null;
   };
   const [intents, setIntents] = useState<LeadIntent[]>(cfgAny.intents ?? ["hiring", "freelance"]);
   const [geoTarget, setGeoTarget] = useState<GeoTarget>(cfgAny.geo_target ?? "global");
   const [maxResults, setMaxResults] = useState<number>(cfgAny.max_results_per_query ?? 5);
+  const [n8nUrl, setN8nUrl] = useState<string>(cfgAny.n8n_webhook_url ?? "");
 
   const saveMut = useMutation({
     mutationFn: () => saveFn({ data: {
       sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults,
+      n8n_webhook_url: n8nUrl.trim() ? n8nUrl.trim() : null,
     } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "scraper"] }),
+    onSuccess: () => { toast.success("Config saved"); qc.invalidateQueries({ queryKey: ["dash", "scraper"] }); },
+    onError: (e: Error) => toast.error(e.message || "Save failed"),
   });
 
+  const testFn = useServerFn(testN8nWebhookFn);
+  const testMut = useMutation({
+    mutationFn: () => testFn(),
+    onSuccess: (r) => r.ok ? toast.success(`n8n responded ${r.status ?? "OK"}`) : toast.error(`n8n test failed: ${r.error ?? r.status}`),
+  });
 
   const triggerFn = useServerFn(triggerGlobalScrapeFn);
   const triggerMut = useMutation({ mutationFn: () => triggerFn() });
+
+  const exportConfig = () => {
+    const payload = { sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults, n8n_webhook_url: n8nUrl || null, exported_at: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `scraper-config-${new Date().toISOString().slice(0,10)}.json`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Config exported");
+  };
+  const importConfig = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const p = JSON.parse(String(reader.result));
+        if (p.sources) setSources({ facebook: !!p.sources.facebook, instagram: !!p.sources.instagram, google: !!p.sources.google, linkedin: !!p.sources.linkedin });
+        if (Array.isArray(p.keywords)) setKeywords(p.keywords.filter((k: unknown) => typeof k === "string"));
+        if (Array.isArray(p.intents)) setIntents(p.intents);
+        if (typeof p.geo_target === "string") setGeoTarget(p.geo_target);
+        if (typeof p.max_results_per_query === "number") setMaxResults(p.max_results_per_query);
+        if (typeof p.n8n_webhook_url === "string") setN8nUrl(p.n8n_webhook_url);
+        toast.success("Config imported — click Save to persist");
+      } catch { toast.error("Invalid config file"); }
+    };
+    reader.readAsText(file);
+  };
 
   const addKw = () => {
     const v = kwInput.trim();
@@ -1074,6 +1110,53 @@ function ScraperPanel() {
             </div>
           </div>
         </section>
+
+
+
+        <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Radio className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium">n8n webhook</h4>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Your personal n8n Webhook URL (POST). Leave blank to fall back to the workspace default.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="https://your-n8n.example.com/webhook/…"
+              value={n8nUrl}
+              onChange={(e) => setN8nUrl(e.target.value)}
+            />
+            <Button type="button" variant="outline" size="sm" disabled={testMut.isPending} onClick={() => testMut.mutate()}>
+              {testMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test"}
+            </Button>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium">Import / Export settings</h4>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={exportConfig}>
+              <Save className="h-4 w-4 mr-1" /> Export JSON
+            </Button>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) importConfig(f); e.currentTarget.value = ""; }}
+              />
+              <span className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border border-border/60 hover:bg-muted cursor-pointer">
+                <Plus className="h-4 w-4" /> Import JSON
+              </span>
+            </label>
+          </div>
+        </section>
+
+
 
 
 
