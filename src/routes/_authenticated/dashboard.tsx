@@ -956,8 +956,24 @@ function ScraperPanel() {
     onSuccess: (r) => r.ok ? toast.success(`n8n responded ${r.status ?? "OK"}`) : toast.error(`n8n test failed: ${r.error ?? r.status}`),
   });
 
+  const trimmedN8n = n8nUrl.trim();
+  const n8nError = useMemo(() => {
+    if (!trimmedN8n) return null; // empty = fall back to workspace default
+    if (trimmedN8n.length > 500) return "URL too long (max 500 chars)";
+    let u: URL;
+    try { u = new URL(trimmedN8n); } catch { return "Enter a valid URL (https://…)"; }
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "URL must start with https:// or http://";
+    if (!u.hostname || u.hostname === "localhost") return "Hostname must be publicly reachable";
+    if (u.protocol === "http:" && !/\.loca\.lt$|\.ngrok(-free)?\.(app|dev|io)$|\.trycloudflare\.com$/i.test(u.hostname)) {
+      return "Use https:// (http is only allowed for tunnel hosts)";
+    }
+    return null;
+  }, [trimmedN8n]);
+  const n8nValid = n8nError === null;
+
   const triggerFn = useServerFn(triggerGlobalScrapeFn);
   const triggerMut = useMutation({ mutationFn: () => triggerFn() });
+
 
   const exportConfig = () => {
     const payload = { sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults, n8n_webhook_url: n8nUrl || null, exported_at: new Date().toISOString() };
