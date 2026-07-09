@@ -130,6 +130,7 @@ export type Database = {
           intents: string[]
           keywords: string[]
           max_results_per_query: number
+          n8n_webhook_url: string | null
           singleton: boolean
           sources: Json
           updated_at: string
@@ -142,6 +143,7 @@ export type Database = {
           intents?: string[]
           keywords?: string[]
           max_results_per_query?: number
+          n8n_webhook_url?: string | null
           singleton?: boolean
           sources?: Json
           updated_at?: string
@@ -154,6 +156,7 @@ export type Database = {
           intents?: string[]
           keywords?: string[]
           max_results_per_query?: number
+          n8n_webhook_url?: string | null
           singleton?: boolean
           sources?: Json
           updated_at?: string
