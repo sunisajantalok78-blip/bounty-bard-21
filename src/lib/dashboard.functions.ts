@@ -400,7 +400,7 @@ export type LeadIntent = (typeof LEAD_INTENTS)[number];
 export const GEO_TARGETS = ["global", "remote", "thailand", "usa", "europe"] as const;
 export type GeoTarget = (typeof GEO_TARGETS)[number];
 
-const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,updated_at";
+const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,n8n_webhook_url,updated_at";
 
 export const getScraperConfigFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
