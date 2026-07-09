@@ -956,8 +956,24 @@ function ScraperPanel() {
     onSuccess: (r) => r.ok ? toast.success(`n8n responded ${r.status ?? "OK"}`) : toast.error(`n8n test failed: ${r.error ?? r.status}`),
   });
 
+  const trimmedN8n = n8nUrl.trim();
+  const n8nError = useMemo(() => {
+    if (!trimmedN8n) return null; // empty = fall back to workspace default
+    if (trimmedN8n.length > 500) return "URL too long (max 500 chars)";
+    let u: URL;
+    try { u = new URL(trimmedN8n); } catch { return "Enter a valid URL (https://…)"; }
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "URL must start with https:// or http://";
+    if (!u.hostname || u.hostname === "localhost") return "Hostname must be publicly reachable";
+    if (u.protocol === "http:" && !/\.loca\.lt$|\.ngrok(-free)?\.(app|dev|io)$|\.trycloudflare\.com$/i.test(u.hostname)) {
+      return "Use https:// (http is only allowed for tunnel hosts)";
+    }
+    return null;
+  }, [trimmedN8n]);
+  const n8nValid = n8nError === null;
+
   const triggerFn = useServerFn(triggerGlobalScrapeFn);
   const triggerMut = useMutation({ mutationFn: () => triggerFn() });
+
 
   const exportConfig = () => {
     const payload = { sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults, n8n_webhook_url: n8nUrl || null, exported_at: new Date().toISOString() };
@@ -1126,12 +1142,32 @@ function ScraperPanel() {
               placeholder="https://your-n8n.example.com/webhook/…"
               value={n8nUrl}
               onChange={(e) => setN8nUrl(e.target.value)}
+              aria-invalid={!n8nValid}
+              className={!n8nValid ? "border-rose-500 focus-visible:ring-rose-500" : undefined}
             />
-            <Button type="button" variant="outline" size="sm" disabled={testMut.isPending} onClick={() => testMut.mutate()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testMut.isPending || !n8nValid || !trimmedN8n}
+              onClick={() => {
+                if (!n8nValid) { toast.error(n8nError ?? "Invalid webhook URL"); return; }
+                testMut.mutate();
+              }}
+            >
               {testMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test"}
             </Button>
           </div>
+          {n8nError && (
+            <p className="text-xs text-rose-400 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" /> {n8nError}
+            </p>
+          )}
+          {!trimmedN8n && (
+            <p className="text-[11px] text-muted-foreground">No personal URL set — dispatches use the workspace default.</p>
+          )}
         </section>
+
 
         <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-2">
           <div className="flex items-center gap-2">
@@ -1171,12 +1207,16 @@ function ScraperPanel() {
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
-              disabled={triggerMut.isPending}
-              onClick={() => triggerMut.mutate()}
+              disabled={triggerMut.isPending || !n8nValid}
+              onClick={() => {
+                if (!n8nValid) { toast.error(n8nError ?? "Fix the webhook URL first"); return; }
+                triggerMut.mutate();
+              }}
               className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
             >
               {triggerMut.isPending ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Dispatching…</>) : (<><PlayCircle className="h-4 w-4 mr-1" /> Trigger Global Scrape Now</>)}
             </Button>
+
             {triggerMut.data?.ok && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check className="h-3 w-3" /> Inserted {triggerMut.data.inserted} lead{triggerMut.data.inserted === 1 ? "" : "s"} from {triggerMut.data.queries} querie{triggerMut.data.queries === 1 ? "" : "s"}</span>}
             {triggerMut.data && !triggerMut.data.ok && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Scrape failed</span>}
 
@@ -1187,7 +1227,14 @@ function ScraperPanel() {
           <span className="text-xs text-muted-foreground">
             Last updated: {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString() : "—"}
           </span>
-          <Button disabled={saveMut.isPending} onClick={() => saveMut.mutate()} className="bg-gradient-to-r from-primary to-accent">
+          <Button
+            disabled={saveMut.isPending || !n8nValid}
+            onClick={() => {
+              if (!n8nValid) { toast.error(n8nError ?? "Fix the webhook URL first"); return; }
+              saveMut.mutate();
+            }}
+            className="bg-gradient-to-r from-primary to-accent"
+          >
             {saveMut.isPending ? "Saving…" : "Save config → n8n"}
           </Button>
         </div>
