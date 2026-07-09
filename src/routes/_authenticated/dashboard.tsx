@@ -1109,6 +1109,9 @@ function ScraperPanel() {
               <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per portfolio query to protect API usage.</p>
             </div>
           </div>
+        </section>
+
+
 
         <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-3">
           <div className="flex items-center gap-2">
