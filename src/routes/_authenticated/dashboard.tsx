@@ -1207,12 +1207,16 @@ function ScraperPanel() {
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
-              disabled={triggerMut.isPending}
-              onClick={() => triggerMut.mutate()}
+              disabled={triggerMut.isPending || !n8nValid}
+              onClick={() => {
+                if (!n8nValid) { toast.error(n8nError ?? "Fix the webhook URL first"); return; }
+                triggerMut.mutate();
+              }}
               className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
             >
               {triggerMut.isPending ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Dispatching…</>) : (<><PlayCircle className="h-4 w-4 mr-1" /> Trigger Global Scrape Now</>)}
             </Button>
+
             {triggerMut.data?.ok && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check className="h-3 w-3" /> Inserted {triggerMut.data.inserted} lead{triggerMut.data.inserted === 1 ? "" : "s"} from {triggerMut.data.queries} querie{triggerMut.data.queries === 1 ? "" : "s"}</span>}
             {triggerMut.data && !triggerMut.data.ok && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Scrape failed</span>}
 
