@@ -36,13 +36,14 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: cfg } = await context.supabase
     .from("scraper_config")
-    .select("id,sources,keywords,intents,geo_target,max_results_per_query,updated_at")
+    .select("id,sources,keywords,intents,geo_target,max_results_per_query,n8n_webhook_url,updated_at")
     .eq("user_id", context.userId)
     .maybeSingle();
   const sources = (cfg?.sources ?? {}) as Record<string, boolean>;
   const intents = ((cfg?.intents ?? ["hiring", "freelance"]) as string[]);
   const geoTarget = (cfg?.geo_target ?? "global") as string;
   const maxPerQuery = Math.max(1, Math.min(50, Number(cfg?.max_results_per_query ?? 5)));
+  const n8nUrl = (cfg?.n8n_webhook_url ?? null) as string | null;
 
   // Portfolio-driven queries — real data from THIS user's my_portfolio
   const { data: portfolio } = await context.supabase
