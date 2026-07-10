@@ -421,6 +421,20 @@ function LeadsPanel() {
   const createLead = useServerFn(createLeadFn);
   const updateStatus = useServerFn(updateLeadStatusFn);
   const requestProposal = useServerFn(requestProposalFn);
+  const validateContact = useServerFn(validateContactFn);
+
+  const validateMut = useMutation({
+    mutationFn: (id: string) => validateContact({ data: { id } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+      if (r?.validation_status === "verified") {
+        toast.success("Contact verified via DNS MX lookup.");
+      } else {
+        toast.warning("Contact could not be verified.");
+      }
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Validation failed"),
+  });
 
   const [selectedId, setSelectedId] = useState<string | null>(leads[0]?.id ?? null);
   const [expandedProposal, setExpandedProposal] = useState<Record<string, boolean>>({});
