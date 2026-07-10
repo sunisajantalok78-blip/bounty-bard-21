@@ -650,7 +650,7 @@ function LeadsPanel() {
                         : gov.cooldownActive ? <Clock className="h-3.5 w-3.5 mr-1 animate-pulse" />
                         : <Zap className="h-3.5 w-3.5 mr-1" />}
                       {proposalMut.isPending && proposalMut.variables === selected.id
-                        ? "Dispatching to n8n…"
+                        ? "Generating proposal…"
                         : gov.capReached
                           ? "Daily Limit Reached"
                           : gov.cooldownActive
@@ -658,6 +658,18 @@ function LeadsPanel() {
                             : selected.business_proposal
                               ? "Regenerate Pro Proposal"
                               : "Generate Pro Proposal"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={validateMut.isPending && validateMut.variables === selected.id}
+                      onClick={() => validateMut.mutate(selected.id)}
+                    >
+                      {validateMut.isPending && validateMut.variables === selected.id ? (
+                        <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Validating…</>
+                      ) : (
+                        <><ShieldCheck className="h-3.5 w-3.5 mr-1" /> Validate contact (DNS)</>
+                      )}
                     </Button>
                     {selected.business_proposal && (
                       <>
@@ -687,10 +699,11 @@ function LeadsPanel() {
                     )}
                     {selected.status === "generating" && !selected.business_proposal && (
                       <span className="text-xs text-amber-400 flex items-center gap-1">
-                        <RefreshCw className="h-3 w-3 animate-spin" /> Waiting for n8n to write back…
+                        <RefreshCw className="h-3 w-3 animate-spin" /> Generating on server…
                       </span>
                     )}
                   </div>
+
 
                   {expandedProposal[selected.id] && selected.business_proposal && (
                     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
