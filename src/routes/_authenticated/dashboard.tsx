@@ -11,6 +11,7 @@ import {
   createLeadFn,
   quickIngestFn,
   requestProposalFn,
+  validateContactFn,
   listPortfolioFn,
   addPortfolioFn,
   updatePortfolioFn,
