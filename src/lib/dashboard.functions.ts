@@ -324,8 +324,11 @@ PART 2 (full Pro Business Proposal, markdown, 250-450 words):
 
 // DNS-based contact validation. Server-only: uses Google DNS-over-HTTPS via fetch.
 export const validateContactFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertWithinDailyLimit(context.userId);
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: lead, error } = await supabaseAdmin
       .from("leads")
