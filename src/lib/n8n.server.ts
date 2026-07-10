@@ -8,8 +8,10 @@ export type N8nEvent =
   | { type: "pitch.sent"; data: unknown }
   | { type: "task.completed"; data: unknown }
   | { type: "plan.generated"; data: unknown }
-  | { type: "audit.refreshed"; data: unknown }
-  | { type: "test"; data: unknown };
+ | { type: "audit.refreshed"; data: unknown }
+ | { type: "lead.proposal_ready"; data: unknown }
+ | { type: "lead.validated"; data: unknown }
+ | { type: "test"; data: unknown };
 
 export async function dispatchToN8n(event: N8nEvent, overrideUrl?: string | null): Promise<{
   ok: boolean;

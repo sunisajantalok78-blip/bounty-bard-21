@@ -11,6 +11,7 @@ import {
   createLeadFn,
   quickIngestFn,
   requestProposalFn,
+  validateContactFn,
   listPortfolioFn,
   addPortfolioFn,
   updatePortfolioFn,
@@ -420,6 +421,20 @@ function LeadsPanel() {
   const createLead = useServerFn(createLeadFn);
   const updateStatus = useServerFn(updateLeadStatusFn);
   const requestProposal = useServerFn(requestProposalFn);
+  const validateContact = useServerFn(validateContactFn);
+
+  const validateMut = useMutation({
+    mutationFn: (id: string) => validateContact({ data: { id } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+      if (r?.validation_status === "verified") {
+        toast.success("Contact verified via DNS MX lookup.");
+      } else {
+        toast.warning("Contact could not be verified.");
+      }
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Validation failed"),
+  });
 
   const [selectedId, setSelectedId] = useState<string | null>(leads[0]?.id ?? null);
   const [expandedProposal, setExpandedProposal] = useState<Record<string, boolean>>({});
@@ -455,7 +470,9 @@ function LeadsPanel() {
         }
         throw new Error(gate.reason ?? "blocked");
       }
-      const res = await requestProposal({ data: { id } });
+      const existing = leads.find((l) => l.id === id);
+      const force = Boolean(existing?.business_proposal);
+      const res = await requestProposal({ data: { id, force } });
       if (res && (res as { skipped?: boolean }).skipped) {
         refundGeneration();
         toast.info("A compliant pitch already exists for this contact. Duplicate prevention active.");
@@ -635,7 +652,7 @@ function LeadsPanel() {
                         : gov.cooldownActive ? <Clock className="h-3.5 w-3.5 mr-1 animate-pulse" />
                         : <Zap className="h-3.5 w-3.5 mr-1" />}
                       {proposalMut.isPending && proposalMut.variables === selected.id
-                        ? "Dispatching to n8n…"
+                        ? "Generating proposal…"
                         : gov.capReached
                           ? "Daily Limit Reached"
                           : gov.cooldownActive
@@ -643,6 +660,18 @@ function LeadsPanel() {
                             : selected.business_proposal
                               ? "Regenerate Pro Proposal"
                               : "Generate Pro Proposal"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={validateMut.isPending && validateMut.variables === selected.id}
+                      onClick={() => validateMut.mutate(selected.id)}
+                    >
+                      {validateMut.isPending && validateMut.variables === selected.id ? (
+                        <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Validating…</>
+                      ) : (
+                        <><ShieldCheck className="h-3.5 w-3.5 mr-1" /> Validate contact (DNS)</>
+                      )}
                     </Button>
                     {selected.business_proposal && (
                       <>
@@ -672,10 +701,11 @@ function LeadsPanel() {
                     )}
                     {selected.status === "generating" && !selected.business_proposal && (
                       <span className="text-xs text-amber-400 flex items-center gap-1">
-                        <RefreshCw className="h-3 w-3 animate-spin" /> Waiting for n8n to write back…
+                        <RefreshCw className="h-3 w-3 animate-spin" /> Generating on server…
                       </span>
                     )}
                   </div>
+
 
                   {expandedProposal[selected.id] && selected.business_proposal && (
                     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
