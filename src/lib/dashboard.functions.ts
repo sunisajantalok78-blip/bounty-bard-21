@@ -151,19 +151,28 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
 // user_id; if no row exists we treat the user as unlimited (no-op).
 async function assertWithinDailyLimit(userId: string): Promise<void> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
+  // user_limits may not be in generated types yet — cast through unknown.
+  const client = supabaseAdmin as unknown as {
+    from: (t: string) => {
+      select: (c: string) => {
+        eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { daily_usage?: number; daily_limit?: number } | null; error: unknown }> };
+      };
+    };
+  };
+  const { data, error } = await client
     .from("user_limits")
-    .select("daily_usage,daily_limit,tier,usage_date")
+    .select("daily_usage,daily_limit")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) return; // table missing / transient → don't hard-block
+  if (error) return;
   if (!data) return;
-  const limit = Number((data as { daily_limit?: number }).daily_limit ?? 0);
-  const used = Number((data as { daily_usage?: number }).daily_usage ?? 0);
+  const limit = Number(data.daily_limit ?? 0);
+  const used = Number(data.daily_usage ?? 0);
   if (limit > 0 && used >= limit) {
     throw new Error("LIMIT_EXCEEDED");
   }
 }
+
 
 // AI proposal generation runs fully server-side via Lovable AI Gateway.
 // Client calls via useServerFn + TanStack Query useMutation; env vars stay on server.
