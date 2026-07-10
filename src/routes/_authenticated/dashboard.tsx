@@ -470,7 +470,9 @@ function LeadsPanel() {
         }
         throw new Error(gate.reason ?? "blocked");
       }
-      const res = await requestProposal({ data: { id } });
+      const existing = leads.find((l) => l.id === id);
+      const force = Boolean(existing?.business_proposal);
+      const res = await requestProposal({ data: { id, force } });
       if (res && (res as { skipped?: boolean }).skipped) {
         refundGeneration();
         toast.info("A compliant pitch already exists for this contact. Duplicate prevention active.");
