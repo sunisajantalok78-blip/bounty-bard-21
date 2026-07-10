@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
       { title: "Bounty Hunter — Live Lead Intelligence" },
       { name: "description", content: "Real-time lead scraping, contact validation, and AI proposal generation. Powered by Jina AI + Lovable Cloud." },
       { property: "og:title", content: "Bounty Hunter — Live Lead Intelligence" },
-      { property: "og:description", content: "Real-time lead scraping, contact validation, and AI proposal generation." },
+      { property: "og:description", content: "Real-time lead scraping, contact validation, and AI proposal generation. Powered by Jina AI + Lovable Cloud." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
