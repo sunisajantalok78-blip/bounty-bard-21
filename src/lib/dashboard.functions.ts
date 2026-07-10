@@ -145,40 +145,180 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
 
 
 
+// AI proposal generation runs fully server-side via Lovable AI Gateway.
+// Client calls via useServerFn + TanStack Query useMutation; env vars stay on server.
 export const requestProposalFn = createServerFn({ method: "POST" })
-  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .inputValidator((d: { id: string; force?: boolean }) =>
+    z.object({ id: z.string().uuid(), force: z.boolean().optional() }).parse(d),
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: lead, error } = await supabaseAdmin
       .from("leads")
-      .select("id,title,description,source,contact,ai_pitch,business_proposal,status,raw_social_data")
+      .select("id,title,description,source,contact,ai_pitch,business_proposal,status,raw_social_data,budget,urgency")
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!lead) throw new Error("lead not found");
 
-    // Idempotency / duplicate-prevention pre-check
-    const alreadyHasPitch =
-      Boolean(lead.ai_pitch && String(lead.ai_pitch).trim()) ||
-      Boolean(lead.business_proposal && String(lead.business_proposal).trim());
-    const inFlight = lead.status === "generating" || lead.status === "ready";
-    if (alreadyHasPitch || inFlight) {
+    // Duplicate / in-flight prevention (skippable with force)
+    const alreadyHasProposal = Boolean(lead.business_proposal && String(lead.business_proposal).trim());
+    const inFlight = lead.status === "generating";
+    if (!data.force && (alreadyHasProposal || inFlight)) {
       return {
         ok: false,
         skipped: true,
-        reason: alreadyHasPitch ? "duplicate_pitch" : "in_flight",
+        reason: alreadyHasProposal ? "duplicate_proposal" : "in_flight",
         status: lead.status,
       } as const;
     }
 
-    await supabaseAdmin.from("leads").update({ status: "generating" }).eq("id", data.id);
+    await supabaseAdmin
+      .from("leads")
+      .update({ status: "generating", processing_status: "generating_pitch" })
+      .eq("id", data.id);
 
-    const { dispatchToN8n } = await import("@/lib/n8n.server");
-    const res = await dispatchToN8n({
-      type: "lead.new",
-      data: { action: "generate_proposal", lead_id: lead.id, lead },
-    });
-    return { ok: res.ok, skipped: false, status: res.status, error: res.error } as const;
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) {
+      await supabaseAdmin
+        .from("leads")
+        .update({ status: "pending", processing_status: "failed" })
+        .eq("id", data.id);
+      throw new Error("Missing LOVABLE_API_KEY");
+    }
+
+    // Pull portfolio for grounded, portfolio-aware pitching
+    let portfolioBlock = "(no portfolio provided)";
+    try {
+      const { data: pf } = await supabaseAdmin
+        .from("my_portfolio")
+        .select("category,content")
+        .order("created_at", { ascending: false })
+        .limit(12);
+      if (pf && pf.length) {
+        portfolioBlock = pf
+          .map((p) => `- [${p.category}] ${String(p.content).slice(0, 400)}`)
+          .join("\n");
+      }
+    } catch { /* non-fatal */ }
+
+    let proposal = "";
+    let pitch = "";
+    try {
+      const { generateText } = await import("ai");
+      const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
+      const model = createLovableAiGatewayProvider(key)("google/gemini-2.5-flash");
+
+      const system = `You are an elite freelance business-development writer for an indie full-stack web developer.
+You write outbound proposals that win paid work. No fluff, no "as an AI", no emojis unless requested.
+Ground every claim in the developer's real portfolio; cite the most relevant 1-2 projects by name.`;
+
+      const socialCtx = lead.raw_social_data ? JSON.stringify(lead.raw_social_data).slice(0, 1200) : "(none)";
+
+      const prompt = `LEAD:
+- Title: ${lead.title}
+- Source: ${lead.source}
+- Contact: ${lead.contact ?? "(unknown)"}
+- Budget: ${lead.budget ?? "(unspecified)"}
+- Urgency: ${lead.urgency ?? "Medium"}
+- Description:
+${lead.description ?? "(no description)"}
+- Enriched social data: ${socialCtx}
+
+DEVELOPER PORTFOLIO (ground your pitch in these — mention 1-2 by name):
+${portfolioBlock}
+
+Produce TWO outputs separated by the exact delimiter line "===PROPOSAL===".
+
+PART 1 (short outbound pitch, <= 90 words, plain text, ready to paste in DM/email):
+- Personalized opener referencing their specific need
+- One concrete value proposition backed by a named portfolio project
+- Clear low-friction CTA (15-min call or reply with scope)
+
+Then the delimiter line "===PROPOSAL===".
+
+PART 2 (full Pro Business Proposal, markdown, 250-450 words):
+## Understanding
+## Proposed Solution
+## Deliverables (bullet list, 3-6 items)
+## Timeline & Milestones
+## Pricing (1-3 tiers with rough $ ranges)
+## Why Me (reference 1-2 named portfolio projects)
+## Next Step (concrete CTA)`;
+
+      const { text } = await generateText({ model, system, prompt });
+      const parts = text.split(/^={3,}PROPOSAL={3,}\s*$/m);
+      pitch = (parts[0] ?? "").trim();
+      proposal = (parts[1] ?? parts[0] ?? "").trim();
+      if (!proposal) proposal = text.trim();
+      if (!pitch) pitch = proposal.slice(0, 500);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await supabaseAdmin
+        .from("leads")
+        .update({ status: "pending", processing_status: "failed" })
+        .eq("id", data.id);
+      throw new Error(`AI generation failed: ${msg}`);
+    }
+
+    const { error: upErr } = await supabaseAdmin
+      .from("leads")
+      .update({
+        ai_pitch: pitch,
+        business_proposal: proposal,
+        status: "ready",
+        processing_status: "success",
+      })
+      .eq("id", data.id);
+    if (upErr) throw new Error(upErr.message);
+
+    // Notify n8n (non-fatal)
+    try {
+      const { dispatchToN8n } = await import("@/lib/n8n.server");
+      await dispatchToN8n({
+        type: "lead.proposal_ready",
+        data: { lead_id: lead.id, ai_pitch: pitch, business_proposal: proposal },
+      });
+    } catch { /* non-fatal */ }
+
+    return {
+      ok: true,
+      skipped: false,
+      status: "ready" as const,
+      ai_pitch: pitch,
+      business_proposal: proposal,
+    };
+  });
+
+// DNS-based contact validation. Server-only: uses Google DNS-over-HTTPS via fetch.
+export const validateContactFn = createServerFn({ method: "POST" })
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: lead, error } = await supabaseAdmin
+      .from("leads")
+      .select("id,description,contact")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!lead) throw new Error("lead not found");
+
+    const { validateFromText } = await import("@/lib/scraper.server");
+    const text = `${lead.description ?? ""}\n${lead.contact ?? ""}`.trim();
+    const v = await validateFromText(text, null);
+
+    const { error: upErr } = await supabaseAdmin
+      .from("leads")
+      .update({
+        contact: v.contact ?? lead.contact,
+        raw_social_data: v.raw_social_data,
+        validation_status: v.validation_status,
+        processing_status: v.validation_status === "verified" ? "validating_contact" : "failed",
+      })
+      .eq("id", data.id);
+    if (upErr) throw new Error(upErr.message);
+
+    return { ok: true, validation_status: v.validation_status, contact: v.contact };
   });
 
 export const updateLeadStatusFn = createServerFn({ method: "POST" })
