@@ -145,13 +145,45 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
 
 
 
+
+// Enforce per-user daily tier limits. Throws "LIMIT_EXCEEDED" when the caller
+// has already spent their daily quota. Reads from public.user_limits keyed by
+// user_id; if no row exists we treat the user as unlimited (no-op).
+async function assertWithinDailyLimit(userId: string): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  // user_limits may not be in generated types yet — cast through unknown.
+  const client = supabaseAdmin as unknown as {
+    from: (t: string) => {
+      select: (c: string) => {
+        eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { daily_usage?: number; daily_limit?: number } | null; error: unknown }> };
+      };
+    };
+  };
+  const { data, error } = await client
+    .from("user_limits")
+    .select("daily_usage,daily_limit")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) return;
+  if (!data) return;
+  const limit = Number(data.daily_limit ?? 0);
+  const used = Number(data.daily_usage ?? 0);
+  if (limit > 0 && used >= limit) {
+    throw new Error("LIMIT_EXCEEDED");
+  }
+}
+
+
 // AI proposal generation runs fully server-side via Lovable AI Gateway.
 // Client calls via useServerFn + TanStack Query useMutation; env vars stay on server.
 export const requestProposalFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string; force?: boolean }) =>
     z.object({ id: z.string().uuid(), force: z.boolean().optional() }).parse(d),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertWithinDailyLimit(context.userId);
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: lead, error } = await supabaseAdmin
       .from("leads")
@@ -292,8 +324,11 @@ PART 2 (full Pro Business Proposal, markdown, 250-450 words):
 
 // DNS-based contact validation. Server-only: uses Google DNS-over-HTTPS via fetch.
 export const validateContactFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertWithinDailyLimit(context.userId);
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: lead, error } = await supabaseAdmin
       .from("leads")
