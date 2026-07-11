@@ -32,6 +32,7 @@ export type Database = {
           status: string
           title: string
           urgency: string
+          user_id: string | null
           validation_status: string
         }
         Insert: {
@@ -51,6 +52,7 @@ export type Database = {
           status?: string
           title: string
           urgency?: string
+          user_id?: string | null
           validation_status?: string
         }
         Update: {
@@ -70,6 +72,7 @@ export type Database = {
           status?: string
           title?: string
           urgency?: string
+          user_id?: string | null
           validation_status?: string
         }
         Relationships: []
@@ -81,6 +84,7 @@ export type Database = {
           id: string
           plan: Json
           profile_links: Json
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -88,6 +92,7 @@ export type Database = {
           id?: string
           plan: Json
           profile_links?: Json
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -95,6 +100,7 @@ export type Database = {
           id?: string
           plan?: Json
           profile_links?: Json
+          user_id?: string | null
         }
         Relationships: []
       }
