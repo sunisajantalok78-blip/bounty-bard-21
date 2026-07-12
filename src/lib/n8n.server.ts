@@ -13,6 +13,18 @@ export type N8nEvent =
  | { type: "lead.validated"; data: unknown }
  | { type: "test"; data: unknown };
 
+/**
+ * POST an event to the configured n8n webhook and log the attempt to the
+ * user's Supabase (`n8n_events`) on a best-effort basis.
+ *
+ * @param event    Discriminated event payload; `type` becomes `event` in the
+ *                 outbound body.
+ * @param overrideUrl  Optional per-user webhook URL; falls back to
+ *                     `process.env.N8N_WEBHOOK_URL`.
+ * @returns Structured result — never throws. `ok` is true only on 2xx.
+ *          Callers should inspect `error` for diagnostics but must never
+ *          surface it to end users (it may contain upstream URLs / statuses).
+ */
 export async function dispatchToN8n(event: N8nEvent, overrideUrl?: string | null): Promise<{
   ok: boolean;
   status?: number;
