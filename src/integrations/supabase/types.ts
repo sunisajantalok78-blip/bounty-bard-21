@@ -30,6 +30,7 @@ export type Database = {
           raw_social_data: Json | null
           source: string
           status: string
+          tags: string[]
           title: string
           urgency: string
           user_id: string | null
@@ -50,6 +51,7 @@ export type Database = {
           raw_social_data?: Json | null
           source?: string
           status?: string
+          tags?: string[]
           title: string
           urgency?: string
           user_id?: string | null
@@ -70,6 +72,7 @@ export type Database = {
           raw_social_data?: Json | null
           source?: string
           status?: string
+          tags?: string[]
           title?: string
           urgency?: string
           user_id?: string | null

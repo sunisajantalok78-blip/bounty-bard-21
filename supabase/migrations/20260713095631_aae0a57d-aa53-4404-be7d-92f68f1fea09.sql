@@ -1,0 +1,1 @@
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT ARRAY[]::text[]; CREATE INDEX IF NOT EXISTS leads_tags_gin_idx ON public.leads USING GIN (tags); CREATE INDEX IF NOT EXISTS leads_urgency_idx ON public.leads (urgency); CREATE INDEX IF NOT EXISTS leads_budget_idx ON public.leads (budget);
