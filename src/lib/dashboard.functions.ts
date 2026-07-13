@@ -23,12 +23,67 @@ export const listLeadsFn = createServerFn({ method: "GET" }).handler(async () =>
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("leads")
-    .select("id,title,description,source,contact,ai_pitch,business_proposal,raw_social_data,status,validation_status,processing_status,budget,urgency,created_at")
+    .select("id,title,description,source,contact,ai_pitch,business_proposal,raw_social_data,status,validation_status,processing_status,budget,urgency,tags,created_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw new Error(error.message);
   return data ?? [];
 });
+
+// Replace the tag list on a single lead.
+export const updateLeadTagsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; tags: string[] }) =>
+    z.object({
+      id: z.string().uuid(),
+      tags: z.array(z.string().trim().min(1).max(40)).max(20),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleaned = Array.from(new Set(data.tags.map((t) => t.toLowerCase())));
+    const { error } = await supabaseAdmin.from("leads").update({ tags: cleaned }).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, tags: cleaned };
+  });
+
+// Bulk-set status and/or append tags across many leads. No AI, no outbound.
+export const bulkUpdateLeadsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { ids: string[]; status?: LeadStatus; add_tags?: string[]; remove_tags?: string[] }) =>
+    z.object({
+      ids: z.array(z.string().uuid()).min(1).max(100),
+      status: z.enum(LEAD_STATUSES).optional(),
+      add_tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+      remove_tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const add = (data.add_tags ?? []).map((t) => t.toLowerCase());
+    const remove = new Set((data.remove_tags ?? []).map((t) => t.toLowerCase()));
+    let updated = 0;
+
+    if (add.length || remove.size) {
+      const { data: rows, error } = await supabaseAdmin
+        .from("leads").select("id,tags").in("id", data.ids);
+      if (error) throw new Error(error.message);
+      for (const r of rows ?? []) {
+        const next = Array.from(new Set([...(r.tags ?? []), ...add])).filter((t) => !remove.has(t));
+        const patch: { tags: string[]; status?: LeadStatus } = { tags: next };
+        if (data.status) patch.status = data.status;
+        const { error: uErr } = await supabaseAdmin.from("leads").update(patch).eq("id", r.id);
+        if (!uErr) updated += 1;
+      }
+    } else if (data.status) {
+      const { error, count } = await supabaseAdmin
+        .from("leads").update({ status: data.status }, { count: "exact" }).in("id", data.ids);
+      if (error) throw new Error(error.message);
+      updated = count ?? data.ids.length;
+    }
+
+    return { ok: true, updated };
+  });
 
 export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
