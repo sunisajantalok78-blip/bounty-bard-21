@@ -12,6 +12,8 @@ import {
   quickIngestFn,
   requestProposalFn,
   validateContactFn,
+  updateLeadTagsFn,
+  bulkUpdateLeadsFn,
   listPortfolioFn,
   addPortfolioFn,
   updatePortfolioFn,
@@ -39,9 +41,10 @@ import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
   Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle, Clock, Ban,
+  Filter, Tag as TagIcon, CheckSquare, Square as SquareIcon, ArrowUpDown,
 } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 
 /* ---------- Client-side raw-data parser ---------- */
@@ -414,6 +417,11 @@ function LiveSyncBar({ count, updatedAt, refetching, onRefresh }: { count: numbe
   );
 }
 
+
+
+type SortKey = "recent" | "budget_desc" | "urgency" | "title";
+const URGENCY_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
+
 function LeadsPanel() {
   const qc = useQueryClient();
   const query = useSuspenseQuery(leadsQO());
@@ -422,6 +430,8 @@ function LeadsPanel() {
   const updateStatus = useServerFn(updateLeadStatusFn);
   const requestProposal = useServerFn(requestProposalFn);
   const validateContact = useServerFn(validateContactFn);
+  const updateTags = useServerFn(updateLeadTagsFn);
+  const bulkUpdate = useServerFn(bulkUpdateLeadsFn);
 
   const validateMut = useMutation({
     mutationFn: (id: string) => validateContact({ data: { id } }),
@@ -441,6 +451,60 @@ function LeadsPanel() {
   const [form, setForm] = useState({ title: "", description: "", source: "manual", contact: "", ai_pitch: "" });
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Filters + sort
+  const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<Set<LeadStatus>>(new Set());
+  const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
+  const [urgencyFilter, setUrgencyFilter] = useState<Set<string>>(new Set());
+  const [minBudget, setMinBudget] = useState("");
+  const [sort, setSort] = useState<SortKey>("recent");
+
+  // Selection for bulk actions
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) =>
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const allSources = useMemo(
+    () => Array.from(new Set(leads.map((l) => l.source).filter(Boolean))) as string[],
+    [leads],
+  );
+  const allTags = useMemo(
+    () => Array.from(new Set(leads.flatMap((l) => (l.tags ?? []) as string[]))),
+    [leads],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const min = Number(minBudget) || 0;
+    let out = leads.filter((l) => {
+      if (sourceFilter.size && !sourceFilter.has(l.source ?? "")) return false;
+      if (statusFilter.size && !statusFilter.has((l.status ?? "pending") as LeadStatus)) return false;
+      if (urgencyFilter.size && !urgencyFilter.has(l.urgency ?? "")) return false;
+      if (tagFilter.size) {
+        const t = new Set((l.tags ?? []) as string[]);
+        for (const need of tagFilter) if (!t.has(need)) return false;
+      }
+      if (min > 0 && (Number(l.budget ?? 0) < min)) return false;
+      if (q) {
+        const hay = `${l.title} ${l.description ?? ""} ${l.contact ?? ""} ${(l.tags ?? []).join(" ")}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    if (sort === "budget_desc") out = [...out].sort((a, b) => Number(b.budget ?? 0) - Number(a.budget ?? 0));
+    else if (sort === "urgency") out = [...out].sort((a, b) => (URGENCY_RANK[b.urgency ?? ""] ?? 0) - (URGENCY_RANK[a.urgency ?? ""] ?? 0));
+    else if (sort === "title") out = [...out].sort((a, b) => a.title.localeCompare(b.title));
+    return out;
+  }, [leads, search, sourceFilter, statusFilter, tagFilter, urgencyFilter, minBudget, sort]);
+
+  const clearFilters = () => {
+    setSearch(""); setSourceFilter(new Set()); setStatusFilter(new Set());
+    setTagFilter(new Set()); setUrgencyFilter(new Set()); setMinBudget(""); setSort("recent");
+  };
+  const activeFilterCount =
+    (search ? 1 : 0) + sourceFilter.size + statusFilter.size + tagFilter.size + urgencyFilter.size + (minBudget ? 1 : 0);
+
   const createMut = useMutation({
     mutationFn: (v: typeof form) => createLead({ data: v }),
     onSuccess: () => {
@@ -453,6 +517,43 @@ function LeadsPanel() {
     mutationFn: (v: { id: string; status: LeadStatus }) => updateStatus({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "leads"] }),
   });
+
+  const tagsMut = useMutation({
+    mutationFn: (v: { id: string; tags: string[] }) => updateTags({ data: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dash", "leads"] }),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Tag update failed"),
+  });
+
+  const bulkMut = useMutation({
+    mutationFn: (v: { ids: string[]; status?: LeadStatus; add_tags?: string[]; remove_tags?: string[] }) =>
+      bulkUpdate({ data: v }),
+    onSuccess: (r) => {
+      toast.success(`Updated ${r.updated} lead(s)`);
+      setSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Bulk update failed"),
+  });
+
+  // Safe bulk validate: sequential, one-by-one, with progress toast
+  const [bulkValidating, setBulkValidating] = useState(false);
+  async function bulkValidateSelected() {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    if (!confirm(`Validate ${ids.length} contact(s) via DNS one by one? Each request runs sequentially.`)) return;
+    setBulkValidating(true);
+    let ok = 0, fail = 0;
+    for (const id of ids) {
+      try {
+        const r = await validateContact({ data: { id } });
+        if (r?.validation_status === "verified") ok++; else fail++;
+      } catch { fail++; }
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+    }
+    setBulkValidating(false);
+    setSelected(new Set());
+    toast.success(`Validated: ${ok} verified · ${fail} failed`);
+  }
 
   const gov = usePitchGovernance();
   const proposalMut = useMutation({
@@ -486,7 +587,6 @@ function LeadsPanel() {
     },
   });
 
-  // Realtime: refetch leads whenever Supabase pushes any change (n8n writeback).
   useEffect(() => {
     const channel = supabase
       .channel("leads-live")
@@ -497,7 +597,7 @@ function LeadsPanel() {
     return () => { supabase.removeChannel(channel); };
   }, [qc]);
 
-  const selected = leads.find((l) => l.id === selectedId) ?? leads[0];
+  const selectedLead = filtered.find((l) => l.id === selectedId) ?? leads.find((l) => l.id === selectedId) ?? filtered[0] ?? leads[0];
 
   const copyPitch = async (id: string, text: string) => {
     try {
@@ -507,12 +607,23 @@ function LeadsPanel() {
     } catch { /* noop */ }
   };
 
+  const visibleIds = filtered.map((l) => l.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+  const toggleSelectAllVisible = () => {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (allVisibleSelected) visibleIds.forEach((id) => n.delete(id));
+      else visibleIds.forEach((id) => n.add(id));
+      return n;
+    });
+  };
+
   return (
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-center gap-2">
         <Inbox className="h-5 w-5 text-primary" />
         <CardTitle>Leads Inbox</CardTitle>
-        <Badge variant="secondary" className="ml-auto">{leads.length}</Badge>
+        <Badge variant="secondary" className="ml-auto">{filtered.length}/{leads.length}</Badge>
       </CardHeader>
       <CardContent className="space-y-4">
         <LiveSyncBar
@@ -521,6 +632,90 @@ function LeadsPanel() {
           refetching={query.isFetching}
           onRefresh={() => qc.invalidateQueries({ queryKey: ["dash", "leads"] })}
         />
+
+        {/* Filter / sort toolbar */}
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search title / desc / contact / tags"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 max-w-xs"
+            />
+            <MultiFilter
+              label="Source" values={allSources} selected={sourceFilter}
+              onToggle={(v) => setSourceFilter((s) => { const n = new Set(s); n.has(v) ? n.delete(v) : n.add(v); return n; })}
+            />
+            <MultiFilter
+              label="Status" values={LEAD_STATUSES as unknown as string[]} selected={statusFilter as Set<string>}
+              onToggle={(v) => setStatusFilter((s) => { const n = new Set(s); n.has(v as LeadStatus) ? n.delete(v as LeadStatus) : n.add(v as LeadStatus); return n; })}
+            />
+            <MultiFilter
+              label="Urgency" values={["High", "Medium", "Low"]} selected={urgencyFilter}
+              onToggle={(v) => setUrgencyFilter((s) => { const n = new Set(s); n.has(v) ? n.delete(v) : n.add(v); return n; })}
+            />
+            {allTags.length > 0 && (
+              <MultiFilter
+                label="Tags" values={allTags} selected={tagFilter}
+                onToggle={(v) => setTagFilter((s) => { const n = new Set(s); n.has(v) ? n.delete(v) : n.add(v); return n; })}
+              />
+            )}
+            <Input
+              placeholder="Min $"
+              value={minBudget}
+              onChange={(e) => setMinBudget(e.target.value.replace(/[^\d]/g, ""))}
+              className="h-8 w-24"
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8">
+                  <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Sort: {sort}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {(["recent", "budget_desc", "urgency", "title"] as SortKey[]).map((k) => (
+                  <DropdownMenuItem key={k} onClick={() => setSort(k)}>
+                    {sort === k && <Check className="h-3.5 w-3.5 mr-1" />} {k}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {activeFilterCount > 0 && (
+              <Button size="sm" variant="ghost" className="h-8" onClick={clearFilters}>
+                <X className="h-3.5 w-3.5 mr-1" /> Clear ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div className="rounded-lg border border-primary/40 bg-primary/10 p-3 flex flex-wrap items-center gap-2">
+            <CheckSquare className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">{selected.size} selected</span>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <BulkStatusMenu
+                disabled={bulkMut.isPending}
+                onPick={(status) => {
+                  if (!confirm(`Set status "${status}" on ${selected.size} lead(s)?`)) return;
+                  bulkMut.mutate({ ids: Array.from(selected), status });
+                }}
+              />
+              <BulkTagInput
+                disabled={bulkMut.isPending}
+                onAdd={(tag) => bulkMut.mutate({ ids: Array.from(selected), add_tags: [tag] })}
+              />
+              <Button size="sm" variant="outline" disabled={bulkValidating} onClick={bulkValidateSelected}>
+                {bulkValidating ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Validating…</>
+                  : <><ShieldCheck className="h-3.5 w-3.5 mr-1" /> Bulk validate (DNS)</>}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                <X className="h-3.5 w-3.5 mr-1" /> Clear
+              </Button>
+            </div>
+          </div>
+        )}
 
         <details className="rounded-lg border border-border/60 bg-muted/30">
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium select-none">Manual lead (advanced)</summary>
@@ -552,63 +747,100 @@ function LeadsPanel() {
           <p className="text-sm text-muted-foreground">
             No leads yet. Paste something into the quick ingest above.
           </p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No leads match the current filters.</p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-[260px_1fr]">
-            <ul className="space-y-1 max-h-[560px] overflow-auto pr-1">
-              {leads.map((l) => {
-                const hasProposal = Boolean(l.business_proposal);
-                const st = (l.status ?? "pending") as LeadStatus;
-                return (
-                  <li key={l.id}>
-                    <button
-                      onClick={() => setSelectedId(l.id)}
-                      className={`w-full text-left rounded-md px-3 py-2 text-sm transition ${
-                        selected?.id === l.id
-                          ? "bg-primary/15 border border-primary/40"
-                          : "hover:bg-muted/60 border border-transparent"
-                      }`}
-                    >
-                      <div className="font-medium truncate flex items-center gap-1.5">
-                        {hasProposal && <Zap className="h-3 w-3 text-amber-400" />}
-                        {l.title}
+          <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+            <div className="space-y-1 max-h-[560px] overflow-auto pr-1">
+              <button
+                onClick={toggleSelectAllVisible}
+                className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+              >
+                {allVisibleSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <SquareIcon className="h-3.5 w-3.5" />}
+                Select all visible ({filtered.length})
+              </button>
+              <ul className="space-y-1">
+                {filtered.map((l) => {
+                  const hasProposal = Boolean(l.business_proposal);
+                  const st = (l.status ?? "pending") as LeadStatus;
+                  const isSel = selected.has(l.id);
+                  return (
+                    <li key={l.id}>
+                      <div
+                        className={`w-full text-left rounded-md px-2 py-2 text-sm transition flex items-start gap-2 ${
+                          selectedLead?.id === l.id
+                            ? "bg-primary/15 border border-primary/40"
+                            : "hover:bg-muted/60 border border-transparent"
+                        }`}
+                      >
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSel(l.id); }}
+                          className="mt-0.5 text-muted-foreground hover:text-foreground"
+                          aria-label={isSel ? "Deselect" : "Select"}
+                        >
+                          {isSel ? <CheckSquare className="h-4 w-4 text-primary" /> : <SquareIcon className="h-4 w-4" />}
+                        </button>
+                        <button onClick={() => setSelectedId(l.id)} className="flex-1 min-w-0 text-left">
+                          <div className="font-medium truncate flex items-center gap-1.5">
+                            {hasProposal && <Zap className="h-3 w-3 text-amber-400" />}
+                            {l.title}
+                          </div>
+                          <div className="text-xs flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className="text-muted-foreground">{l.source}</span>
+                            <span className={`text-[10px] rounded border px-1.5 py-0.5 ${STATUS_STYLES[st] ?? ""}`}>{st}</span>
+                            {l.urgency && <span className="text-[10px] text-muted-foreground">· {l.urgency}</span>}
+                            {typeof l.budget === "number" && l.budget > 0 && (
+                              <span className="text-[10px] text-emerald-300">· ${l.budget}</span>
+                            )}
+                            <ValidationBadge contact={l.contact} description={l.description} status={l.validation_status} />
+                            {l.processing_status && l.processing_status !== "success" && (
+                              <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                            )}
+                          </div>
+                          {(l.tags ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {(l.tags as string[]).slice(0, 4).map((t) => (
+                                <span key={t} className="text-[10px] rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">#{t}</span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
                       </div>
-                      <div className="text-xs flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-muted-foreground">{l.source}</span>
-                        <span className={`text-[10px] rounded border px-1.5 py-0.5 ${STATUS_STYLES[st] ?? ""}`}>{st}</span>
-                        <ValidationBadge contact={l.contact} description={l.description} status={l.validation_status} />
-                        {l.processing_status && l.processing_status !== "success" && (
-                          <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
 
-            {selected && (
+            {selectedLead && (
               <div className="rounded-lg border border-border/60 bg-card/50 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold">{selected.title}</h3>
+                  <h3 className="font-semibold">{selectedLead.title}</h3>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    <ValidationBadge contact={selected.contact} description={selected.description} status={selected.validation_status} />
-                    <Badge>{selected.source}</Badge>
+                    <ValidationBadge contact={selectedLead.contact} description={selectedLead.description} status={selectedLead.validation_status} />
+                    <Badge>{selectedLead.source}</Badge>
                   </div>
                 </div>
-                <ProcessingStepper status={selected.processing_status as ProcStep} />
-                {selected.description && (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selected.description}</p>
+                <ProcessingStepper status={selectedLead.processing_status as ProcStep} />
+                {selectedLead.description && (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedLead.description}</p>
                 )}
-                {selected.contact && (
+                {selectedLead.contact && (
                   <p className="text-xs text-muted-foreground break-all">
-                    Contact: <span className="text-foreground">{selected.contact}</span>
+                    Contact: <span className="text-foreground">{selectedLead.contact}</span>
                   </p>
                 )}
 
+                <TagEditor
+                  tags={(selectedLead.tags ?? []) as string[]}
+                  onChange={(tags) => tagsMut.mutate({ id: selectedLead.id, tags })}
+                  disabled={tagsMut.isPending}
+                />
+
                 <StatusPipeline
-                  current={(selected.status ?? "pending") as LeadStatus}
+                  current={(selectedLead.status ?? "pending") as LeadStatus}
                   pending={statusMut.isPending}
-                  onChange={(status) => statusMut.mutate({ id: selected.id, status })}
+                  onChange={(status) => statusMut.mutate({ id: selectedLead.id, status })}
                 />
 
                 <div>
@@ -616,15 +848,15 @@ function LeadsPanel() {
                     <Sparkles className="h-3.5 w-3.5" /> AI generated pitch
                   </div>
                   <div className="rounded-md border border-border/60 bg-background/60 p-3 text-sm whitespace-pre-wrap min-h-[60px]">
-                    {selected.ai_pitch || <span className="text-muted-foreground">No pitch generated yet.</span>}
+                    {selectedLead.ai_pitch || <span className="text-muted-foreground">No pitch generated yet.</span>}
                   </div>
-                  {selected.ai_pitch && (
+                  {selectedLead.ai_pitch && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      <Button size="sm" variant="outline" onClick={() => copyPitch(selected.id, selected.ai_pitch!)}>
-                        {copied === selected.id ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
-                        {copied === selected.id ? "Copied" : "Copy Pitch"}
+                      <Button size="sm" variant="outline" onClick={() => copyPitch(selectedLead.id, selectedLead.ai_pitch!)}>
+                        {copied === selectedLead.id ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                        {copied === selectedLead.id ? "Copied" : "Copy Pitch"}
                       </Button>
-                      <QuickOpenMenu pitch={selected.ai_pitch} contact={selected.contact} />
+                      <QuickOpenMenu pitch={selectedLead.ai_pitch} contact={selectedLead.contact} />
                     </div>
                   )}
                 </div>
@@ -635,10 +867,10 @@ function LeadsPanel() {
                       size="sm"
                       variant="default"
                       disabled={
-                        (proposalMut.isPending && proposalMut.variables === selected.id) ||
+                        (proposalMut.isPending && proposalMut.variables === selectedLead.id) ||
                         !gov.canGenerate
                       }
-                      onClick={() => proposalMut.mutate(selected.id)}
+                      onClick={() => proposalMut.mutate(selectedLead.id)}
                       title={
                         gov.capReached
                           ? "Daily compliant outreach limit reached to prevent automated spamming."
@@ -651,38 +883,38 @@ function LeadsPanel() {
                       {gov.capReached ? <Ban className="h-3.5 w-3.5 mr-1" />
                         : gov.cooldownActive ? <Clock className="h-3.5 w-3.5 mr-1 animate-pulse" />
                         : <Zap className="h-3.5 w-3.5 mr-1" />}
-                      {proposalMut.isPending && proposalMut.variables === selected.id
+                      {proposalMut.isPending && proposalMut.variables === selectedLead.id
                         ? "Generating proposal…"
                         : gov.capReached
                           ? "Daily Limit Reached"
                           : gov.cooldownActive
                             ? `Cooling down · ${Math.ceil(gov.cooldownRemainingMs / 1000)}s`
-                            : selected.business_proposal
+                            : selectedLead.business_proposal
                               ? "Regenerate Pro Proposal"
                               : "Generate Pro Proposal"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={validateMut.isPending && validateMut.variables === selected.id}
-                      onClick={() => validateMut.mutate(selected.id)}
+                      disabled={validateMut.isPending && validateMut.variables === selectedLead.id}
+                      onClick={() => validateMut.mutate(selectedLead.id)}
                     >
-                      {validateMut.isPending && validateMut.variables === selected.id ? (
+                      {validateMut.isPending && validateMut.variables === selectedLead.id ? (
                         <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Validating…</>
                       ) : (
                         <><ShieldCheck className="h-3.5 w-3.5 mr-1" /> Validate contact (DNS)</>
                       )}
                     </Button>
-                    {selected.business_proposal && (
+                    {selectedLead.business_proposal && (
                       <>
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() =>
-                            setExpandedProposal((s) => ({ ...s, [selected.id]: !s[selected.id] }))
+                            setExpandedProposal((s) => ({ ...s, [selectedLead.id]: !s[selectedLead.id] }))
                           }
                         >
-                          {expandedProposal[selected.id] ? (
+                          {expandedProposal[selectedLead.id] ? (
                             <><ChevronUp className="h-3.5 w-3.5 mr-1" /> Hide proposal</>
                           ) : (
                             <><ChevronDown className="h-3.5 w-3.5 mr-1" /> View proposal</>
@@ -691,37 +923,36 @@ function LeadsPanel() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => copyPitch(`${selected.id}-prop`, selected.business_proposal!)}
+                          onClick={() => copyPitch(`${selectedLead.id}-prop`, selectedLead.business_proposal!)}
                         >
-                          {copied === `${selected.id}-prop` ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                          {copied === `${selectedLead.id}-prop` ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
                           Copy Proposal
                         </Button>
-                        <QuickOpenMenu pitch={selected.business_proposal} contact={selected.contact} />
+                        <QuickOpenMenu pitch={selectedLead.business_proposal} contact={selectedLead.contact} />
                       </>
                     )}
-                    {selected.status === "generating" && !selected.business_proposal && (
+                    {selectedLead.status === "generating" && !selectedLead.business_proposal && (
                       <span className="text-xs text-amber-400 flex items-center gap-1">
                         <RefreshCw className="h-3 w-3 animate-spin" /> Generating on server…
                       </span>
                     )}
                   </div>
 
-
-                  {expandedProposal[selected.id] && selected.business_proposal && (
+                  {expandedProposal[selectedLead.id] && selectedLead.business_proposal && (
                     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
                       <div className="text-xs uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-1">
                         <Zap className="h-3.5 w-3.5" /> Pro Business Proposal
                       </div>
                       <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                        {selected.business_proposal}
+                        {selectedLead.business_proposal}
                       </div>
-                      {selected.raw_social_data && (
+                      {selectedLead.raw_social_data && (
                         <details className="mt-3">
                           <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                             Raw social data
                           </summary>
                           <pre className="text-[11px] mt-2 max-h-64 overflow-auto bg-background/60 p-2 rounded border border-border/40">
-                            {JSON.stringify(selected.raw_social_data, null, 2)}
+                            {JSON.stringify(selectedLead.raw_social_data, null, 2)}
                           </pre>
                         </details>
                       )}
@@ -734,6 +965,126 @@ function LeadsPanel() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function MultiFilter({
+  label, values, selected, onToggle,
+}: { label: string; values: string[]; selected: Set<string>; onToggle: (v: string) => void }) {
+  if (values.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" className="h-8">
+          {label}{selected.size > 0 && <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{selected.size}</Badge>}
+          <ChevronDown className="h-3 w-3 ml-1" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 overflow-auto">
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {values.map((v) => (
+          <DropdownMenuCheckboxItem
+            key={v}
+            checked={selected.has(v)}
+            onCheckedChange={() => onToggle(v)}
+            onSelect={(e) => e.preventDefault()}
+          >
+            {v}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function BulkStatusMenu({ disabled, onPick }: { disabled: boolean; onPick: (s: LeadStatus) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" disabled={disabled}>
+          <Layers className="h-3.5 w-3.5 mr-1" /> Bulk status <ChevronDown className="h-3 w-3 ml-1" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Set status on selected</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {LEAD_STATUSES.map((s) => (
+          <DropdownMenuItem key={s} onClick={() => onPick(s)}>{s}</DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function BulkTagInput({ disabled, onAdd }: { disabled: boolean; onAdd: (tag: string) => void }) {
+  const [v, setV] = useState("");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const t = v.trim().toLowerCase();
+        if (!t) return;
+        onAdd(t);
+        setV("");
+      }}
+      className="flex items-center gap-1"
+    >
+      <Input
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        placeholder="+ tag"
+        className="h-8 w-28"
+        disabled={disabled}
+      />
+      <Button size="sm" variant="outline" type="submit" disabled={disabled || !v.trim()}>
+        <TagIcon className="h-3.5 w-3.5 mr-1" /> Add
+      </Button>
+    </form>
+  );
+}
+
+function TagEditor({ tags, onChange, disabled }: { tags: string[]; onChange: (t: string[]) => void; disabled: boolean }) {
+  const [v, setV] = useState("");
+  return (
+    <div className="space-y-1.5">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+        <TagIcon className="h-3.5 w-3.5" /> Tags
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {tags.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted px-2 py-0.5 text-xs">
+            #{t}
+            <button
+              onClick={() => onChange(tags.filter((x) => x !== t))}
+              disabled={disabled}
+              className="hover:text-rose-400"
+              aria-label={`Remove tag ${t}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const nt = v.trim().toLowerCase();
+            if (!nt || tags.includes(nt)) { setV(""); return; }
+            onChange([...tags, nt]);
+            setV("");
+          }}
+          className="flex items-center gap-1"
+        >
+          <Input
+            value={v}
+            onChange={(e) => setV(e.target.value)}
+            placeholder="add tag"
+            className="h-7 w-28 text-xs"
+            disabled={disabled}
+          />
+        </form>
+      </div>
+    </div>
   );
 }
 
