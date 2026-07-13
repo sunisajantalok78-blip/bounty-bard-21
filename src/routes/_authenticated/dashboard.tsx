@@ -417,7 +417,7 @@ function LiveSyncBar({ count, updatedAt, refetching, onRefresh }: { count: numbe
   );
 }
 
-type LeadRow = ReturnType<typeof useSuspenseQuery<ReturnType<typeof leadsQO>["queryFn"] extends () => Promise<infer T> ? T : never>>["data"][number];
+
 
 type SortKey = "recent" | "budget_desc" | "urgency" | "title";
 const URGENCY_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
