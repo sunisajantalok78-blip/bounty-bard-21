@@ -47,6 +47,27 @@ export const updateLeadTagsFn = createServerFn({ method: "POST" })
     return { ok: true, tags: cleaned };
   });
 
+// Edit the AI pitch and/or Pro Business Proposal text for a single lead.
+export const updateLeadContentFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; ai_pitch?: string | null; business_proposal?: string | null }) =>
+    z.object({
+      id: z.string().uuid(),
+      ai_pitch: z.string().max(8000).nullable().optional(),
+      business_proposal: z.string().max(20000).nullable().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const patch: Record<string, unknown> = {};
+    if (data.ai_pitch !== undefined) patch.ai_pitch = data.ai_pitch;
+    if (data.business_proposal !== undefined) patch.business_proposal = data.business_proposal;
+    if (!Object.keys(patch).length) return { ok: true };
+    const { error } = await supabaseAdmin.from("leads").update(patch).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 // Bulk-set status and/or append tags across many leads. No AI, no outbound.
 export const bulkUpdateLeadsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
