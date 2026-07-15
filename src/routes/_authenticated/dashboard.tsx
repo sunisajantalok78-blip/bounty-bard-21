@@ -295,7 +295,7 @@ function EditableText(props: {
               {props.copied ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
               {props.copied ? "Copied" : "Copy"}
             </Button>
-            <QuickOpenMenu pitch={props.value} contact={props.contact} />
+            <QuickOpenMenu pitch={props.value} contact={props.contact ?? null} />
           </>
         ) : null}
       </div>
