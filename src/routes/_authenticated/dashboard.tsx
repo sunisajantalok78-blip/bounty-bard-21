@@ -42,7 +42,7 @@ import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
   Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle, Clock, Ban,
-  Filter, Tag as TagIcon, CheckSquare, Square as SquareIcon, ArrowUpDown,
+  Filter, Tag as TagIcon, CheckSquare, Square as SquareIcon, ArrowUpDown, Download, Lightbulb,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem,
