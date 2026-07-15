@@ -13,6 +13,7 @@ import {
   requestProposalFn,
   validateContactFn,
   updateLeadTagsFn,
+  updateLeadContentFn,
   bulkUpdateLeadsFn,
   listPortfolioFn,
   addPortfolioFn,
