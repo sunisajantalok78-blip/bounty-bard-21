@@ -13,6 +13,7 @@ import {
   requestProposalFn,
   validateContactFn,
   updateLeadTagsFn,
+  updateLeadContentFn,
   bulkUpdateLeadsFn,
   listPortfolioFn,
   addPortfolioFn,
@@ -41,7 +42,7 @@ import {
   Inbox, Briefcase, Send, Plus, Trash2, Sparkles, ChevronDown, ChevronUp,
   Radio, Zap, RefreshCw, Copy, Check, MessageCircle, Settings2, X, Pencil, Save,
   Layers, ClipboardList, Rocket, Trophy, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, PlayCircle, Clock, Ban,
-  Filter, Tag as TagIcon, CheckSquare, Square as SquareIcon, ArrowUpDown,
+  Filter, Tag as TagIcon, CheckSquare, Square as SquareIcon, ArrowUpDown, Download, Lightbulb,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem,
@@ -189,6 +190,119 @@ function DashboardUserMenu() {
   );
 }
 
+/* ---------------- Onboarding banner (dismissible) ---------------- */
+const ONBOARDING_KEY = "bh_onboarding_dismissed_v1";
+function OnboardingBanner() {
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    try { setDismissed(localStorage.getItem(ONBOARDING_KEY) === "1"); } catch { /* ignore */ }
+  }, []);
+  if (dismissed) return null;
+  const dismiss = () => {
+    try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    setDismissed(true);
+  };
+  return (
+    <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex gap-3">
+      <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+      <div className="text-sm space-y-1 flex-1">
+        <div className="font-semibold">Quick start — 4 steps</div>
+        <ol className="list-decimal list-inside text-muted-foreground space-y-0.5">
+          <li>Add case studies in <b>Portfolio</b> so the scraper knows your intent.</li>
+          <li>Open <b>Scraper</b>, set your n8n webhook + keywords, then Trigger Global Scrape.</li>
+          <li>Ingest / review leads here. Click <b>Generate Pro Proposal</b> then <b>Validate contact (DNS)</b>.</li>
+          <li>Edit the pitch inline, copy it, and send via WhatsApp / Telegram / Email — nothing auto-sends.</li>
+        </ol>
+      </div>
+      <Button size="sm" variant="ghost" onClick={dismiss}><X className="h-4 w-4" /></Button>
+    </div>
+  );
+}
+
+/* ---------------- CSV export helper ---------------- */
+function downloadLeadsCsv(rows: Array<Record<string, unknown>>) {
+  const cols = ["id","title","source","status","validation_status","urgency","budget","contact","tags","created_at"];
+  const esc = (v: unknown) => {
+    if (v == null) return "";
+    const s = Array.isArray(v) ? v.join("|") : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => esc(r[c])).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------------- Editable text (pitch / proposal) ---------------- */
+function EditableText(props: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  emptyLabel: string;
+  saving: boolean;
+  onSave: (v: string) => void;
+  onCopy: (v: string) => void;
+  copied: boolean;
+  contact: string | null | undefined;
+  minRows?: number;
+  toneClass?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(props.value);
+  useEffect(() => { if (!editing) setDraft(props.value); }, [props.value, editing]);
+  const tone = props.toneClass ?? "border-border/60 bg-background/60";
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
+        {props.icon} {props.label}
+        <div className="ml-auto flex items-center gap-1">
+          {!editing && props.value && (
+            <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setEditing(true)}>
+              <Pencil className="h-3 w-3 mr-1" /> Edit
+            </Button>
+          )}
+        </div>
+      </div>
+      {editing ? (
+        <Textarea
+          rows={Math.max(props.minRows ?? 4, 6)}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="text-sm"
+        />
+      ) : (
+        <div className={`rounded-md border p-3 text-sm whitespace-pre-wrap min-h-[60px] ${tone}`}>
+          {props.value || <span className="text-muted-foreground">{props.emptyLabel}</span>}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {editing ? (
+          <>
+            <Button size="sm" disabled={props.saving} onClick={() => { props.onSave(draft); setEditing(false); }}>
+              <Save className="h-3.5 w-3.5 mr-1" /> {props.saving ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setDraft(props.value); setEditing(false); }}>
+              <X className="h-3.5 w-3.5 mr-1" /> Cancel
+            </Button>
+          </>
+        ) : props.value ? (
+          <>
+            <Button size="sm" variant="outline" onClick={() => props.onCopy(props.value)}>
+              {props.copied ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+              {props.copied ? "Copied" : "Copy"}
+            </Button>
+            <QuickOpenMenu pitch={props.value} contact={props.contact ?? null} />
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -208,9 +322,10 @@ function DashboardPage() {
           </div>
         </header>
 
-
+        <OnboardingBanner />
         <MetricsBar />
         <QuickIngest />
+
 
         <Tabs defaultValue="leads" className="space-y-4">
           <TabsList className="grid grid-cols-3 max-w-xl">
@@ -431,7 +546,18 @@ function LeadsPanel() {
   const requestProposal = useServerFn(requestProposalFn);
   const validateContact = useServerFn(validateContactFn);
   const updateTags = useServerFn(updateLeadTagsFn);
+  const updateContent = useServerFn(updateLeadContentFn);
   const bulkUpdate = useServerFn(bulkUpdateLeadsFn);
+
+  const contentMut = useMutation({
+    mutationFn: (v: { id: string; ai_pitch?: string | null; business_proposal?: string | null }) =>
+      updateContent({ data: v }),
+    onSuccess: () => {
+      toast.success("Saved");
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Save failed"),
+  });
 
   const validateMut = useMutation({
     mutationFn: (id: string) => validateContact({ data: { id } }),
@@ -686,6 +812,14 @@ function LeadsPanel() {
                 <X className="h-3.5 w-3.5 mr-1" /> Clear ({activeFilterCount})
               </Button>
             )}
+            <Button
+              size="sm" variant="outline" className="h-8 ml-auto"
+              disabled={filtered.length === 0}
+              onClick={() => downloadLeadsCsv(filtered as unknown as Array<Record<string, unknown>>)}
+              title="Export the currently filtered leads as CSV"
+            >
+              <Download className="h-3.5 w-3.5 mr-1" /> Export CSV ({filtered.length})
+            </Button>
           </div>
         </div>
 
@@ -843,23 +977,19 @@ function LeadsPanel() {
                   onChange={(status) => statusMut.mutate({ id: selectedLead.id, status })}
                 />
 
-                <div>
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                    <Sparkles className="h-3.5 w-3.5" /> AI generated pitch
-                  </div>
-                  <div className="rounded-md border border-border/60 bg-background/60 p-3 text-sm whitespace-pre-wrap min-h-[60px]">
-                    {selectedLead.ai_pitch || <span className="text-muted-foreground">No pitch generated yet.</span>}
-                  </div>
-                  {selectedLead.ai_pitch && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <Button size="sm" variant="outline" onClick={() => copyPitch(selectedLead.id, selectedLead.ai_pitch!)}>
-                        {copied === selectedLead.id ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
-                        {copied === selectedLead.id ? "Copied" : "Copy Pitch"}
-                      </Button>
-                      <QuickOpenMenu pitch={selectedLead.ai_pitch} contact={selectedLead.contact} />
-                    </div>
-                  )}
-                </div>
+                <EditableText
+                  icon={<Sparkles className="h-3.5 w-3.5" />}
+                  label="AI generated pitch"
+                  value={selectedLead.ai_pitch ?? ""}
+                  emptyLabel="No pitch generated yet."
+                  saving={contentMut.isPending}
+                  onSave={(v) => contentMut.mutate({ id: selectedLead.id, ai_pitch: v })}
+                  onCopy={(v) => copyPitch(selectedLead.id, v)}
+                  copied={copied === selectedLead.id}
+                  contact={selectedLead.contact}
+                  minRows={3}
+                />
+
 
                 <div>
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -939,15 +1069,22 @@ function LeadsPanel() {
                   </div>
 
                   {expandedProposal[selectedLead.id] && selectedLead.business_proposal && (
-                    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
-                      <div className="text-xs uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-1">
-                        <Zap className="h-3.5 w-3.5" /> Pro Business Proposal
-                      </div>
-                      <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                        {selectedLead.business_proposal}
-                      </div>
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                      <EditableText
+                        icon={<Zap className="h-3.5 w-3.5" />}
+                        label="Pro Business Proposal"
+                        value={selectedLead.business_proposal ?? ""}
+                        emptyLabel="No proposal yet."
+                        saving={contentMut.isPending}
+                        onSave={(v) => contentMut.mutate({ id: selectedLead.id, business_proposal: v })}
+                        onCopy={(v) => copyPitch(`${selectedLead.id}-prop`, v)}
+                        copied={copied === `${selectedLead.id}-prop`}
+                        contact={selectedLead.contact}
+                        minRows={10}
+                        toneClass="border-amber-500/20 bg-background/40"
+                      />
                       {selectedLead.raw_social_data && (
-                        <details className="mt-3">
+                        <details>
                           <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                             Raw social data
                           </summary>
