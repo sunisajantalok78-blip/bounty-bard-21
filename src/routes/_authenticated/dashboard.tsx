@@ -190,6 +190,53 @@ function DashboardUserMenu() {
   );
 }
 
+/* ---------------- Onboarding banner (dismissible) ---------------- */
+const ONBOARDING_KEY = "bh_onboarding_dismissed_v1";
+function OnboardingBanner() {
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    try { setDismissed(localStorage.getItem(ONBOARDING_KEY) === "1"); } catch { /* ignore */ }
+  }, []);
+  if (dismissed) return null;
+  const dismiss = () => {
+    try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    setDismissed(true);
+  };
+  return (
+    <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex gap-3">
+      <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+      <div className="text-sm space-y-1 flex-1">
+        <div className="font-semibold">Quick start — 4 steps</div>
+        <ol className="list-decimal list-inside text-muted-foreground space-y-0.5">
+          <li>Add case studies in <b>Portfolio</b> so the scraper knows your intent.</li>
+          <li>Open <b>Scraper</b>, set your n8n webhook + keywords, then Trigger Global Scrape.</li>
+          <li>Ingest / review leads here. Click <b>Generate Pro Proposal</b> then <b>Validate contact (DNS)</b>.</li>
+          <li>Edit the pitch inline, copy it, and send via WhatsApp / Telegram / Email — nothing auto-sends.</li>
+        </ol>
+      </div>
+      <Button size="sm" variant="ghost" onClick={dismiss}><X className="h-4 w-4" /></Button>
+    </div>
+  );
+}
+
+/* ---------------- CSV export helper ---------------- */
+function downloadLeadsCsv(rows: Array<Record<string, unknown>>) {
+  const cols = ["id","title","source","status","validation_status","urgency","budget","contact","tags","created_at"];
+  const esc = (v: unknown) => {
+    if (v == null) return "";
+    const s = Array.isArray(v) ? v.join("|") : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => esc(r[c])).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
