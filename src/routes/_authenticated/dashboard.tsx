@@ -735,6 +735,14 @@ function LeadsPanel() {
                 <X className="h-3.5 w-3.5 mr-1" /> Clear ({activeFilterCount})
               </Button>
             )}
+            <Button
+              size="sm" variant="outline" className="h-8 ml-auto"
+              disabled={filtered.length === 0}
+              onClick={() => downloadLeadsCsv(filtered as unknown as Array<Record<string, unknown>>)}
+              title="Export the currently filtered leads as CSV"
+            >
+              <Download className="h-3.5 w-3.5 mr-1" /> Export CSV ({filtered.length})
+            </Button>
           </div>
         </div>
 
