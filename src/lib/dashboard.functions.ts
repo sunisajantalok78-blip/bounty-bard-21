@@ -59,7 +59,7 @@ export const updateLeadContentFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const patch: Record<string, unknown> = {};
+    const patch: { ai_pitch?: string | null; business_proposal?: string | null } = {};
     if (data.ai_pitch !== undefined) patch.ai_pitch = data.ai_pitch;
     if (data.business_proposal !== undefined) patch.business_proposal = data.business_proposal;
     if (!Object.keys(patch).length) return { ok: true };
