@@ -480,7 +480,18 @@ function LeadsPanel() {
   const requestProposal = useServerFn(requestProposalFn);
   const validateContact = useServerFn(validateContactFn);
   const updateTags = useServerFn(updateLeadTagsFn);
+  const updateContent = useServerFn(updateLeadContentFn);
   const bulkUpdate = useServerFn(bulkUpdateLeadsFn);
+
+  const contentMut = useMutation({
+    mutationFn: (v: { id: string; ai_pitch?: string | null; business_proposal?: string | null }) =>
+      updateContent({ data: v }),
+    onSuccess: () => {
+      toast.success("Saved");
+      qc.invalidateQueries({ queryKey: ["dash", "leads"] });
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Save failed"),
+  });
 
   const validateMut = useMutation({
     mutationFn: (id: string) => validateContact({ data: { id } }),
