@@ -209,9 +209,10 @@ function DashboardPage() {
           </div>
         </header>
 
-
+        <OnboardingBanner />
         <MetricsBar />
         <QuickIngest />
+
 
         <Tabs defaultValue="leads" className="space-y-4">
           <TabsList className="grid grid-cols-3 max-w-xl">
