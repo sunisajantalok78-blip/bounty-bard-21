@@ -911,23 +911,19 @@ function LeadsPanel() {
                   onChange={(status) => statusMut.mutate({ id: selectedLead.id, status })}
                 />
 
-                <div>
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                    <Sparkles className="h-3.5 w-3.5" /> AI generated pitch
-                  </div>
-                  <div className="rounded-md border border-border/60 bg-background/60 p-3 text-sm whitespace-pre-wrap min-h-[60px]">
-                    {selectedLead.ai_pitch || <span className="text-muted-foreground">No pitch generated yet.</span>}
-                  </div>
-                  {selectedLead.ai_pitch && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <Button size="sm" variant="outline" onClick={() => copyPitch(selectedLead.id, selectedLead.ai_pitch!)}>
-                        {copied === selectedLead.id ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
-                        {copied === selectedLead.id ? "Copied" : "Copy Pitch"}
-                      </Button>
-                      <QuickOpenMenu pitch={selectedLead.ai_pitch} contact={selectedLead.contact} />
-                    </div>
-                  )}
-                </div>
+                <EditableText
+                  icon={<Sparkles className="h-3.5 w-3.5" />}
+                  label="AI generated pitch"
+                  value={selectedLead.ai_pitch ?? ""}
+                  emptyLabel="No pitch generated yet."
+                  saving={contentMut.isPending}
+                  onSave={(v) => contentMut.mutate({ id: selectedLead.id, ai_pitch: v })}
+                  onCopy={(v) => copyPitch(selectedLead.id, v)}
+                  copied={copied === selectedLead.id}
+                  contact={selectedLead.contact}
+                  minRows={3}
+                />
+
 
                 <div>
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
