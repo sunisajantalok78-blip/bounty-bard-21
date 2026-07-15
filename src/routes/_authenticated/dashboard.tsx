@@ -1069,15 +1069,22 @@ function LeadsPanel() {
                   </div>
 
                   {expandedProposal[selectedLead.id] && selectedLead.business_proposal && (
-                    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
-                      <div className="text-xs uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-1">
-                        <Zap className="h-3.5 w-3.5" /> Pro Business Proposal
-                      </div>
-                      <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                        {selectedLead.business_proposal}
-                      </div>
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                      <EditableText
+                        icon={<Zap className="h-3.5 w-3.5" />}
+                        label="Pro Business Proposal"
+                        value={selectedLead.business_proposal ?? ""}
+                        emptyLabel="No proposal yet."
+                        saving={contentMut.isPending}
+                        onSave={(v) => contentMut.mutate({ id: selectedLead.id, business_proposal: v })}
+                        onCopy={(v) => copyPitch(`${selectedLead.id}-prop`, v)}
+                        copied={copied === `${selectedLead.id}-prop`}
+                        contact={selectedLead.contact}
+                        minRows={10}
+                        toneClass="border-amber-500/20 bg-background/40"
+                      />
                       {selectedLead.raw_social_data && (
-                        <details className="mt-3">
+                        <details>
                           <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                             Raw social data
                           </summary>
