@@ -237,6 +237,72 @@ function downloadLeadsCsv(rows: Array<Record<string, unknown>>) {
   URL.revokeObjectURL(url);
 }
 
+/* ---------------- Editable text (pitch / proposal) ---------------- */
+function EditableText(props: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  emptyLabel: string;
+  saving: boolean;
+  onSave: (v: string) => void;
+  onCopy: (v: string) => void;
+  copied: boolean;
+  contact: string | null | undefined;
+  minRows?: number;
+  toneClass?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(props.value);
+  useEffect(() => { if (!editing) setDraft(props.value); }, [props.value, editing]);
+  const tone = props.toneClass ?? "border-border/60 bg-background/60";
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
+        {props.icon} {props.label}
+        <div className="ml-auto flex items-center gap-1">
+          {!editing && props.value && (
+            <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setEditing(true)}>
+              <Pencil className="h-3 w-3 mr-1" /> Edit
+            </Button>
+          )}
+        </div>
+      </div>
+      {editing ? (
+        <Textarea
+          rows={Math.max(props.minRows ?? 4, 6)}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="text-sm"
+        />
+      ) : (
+        <div className={`rounded-md border p-3 text-sm whitespace-pre-wrap min-h-[60px] ${tone}`}>
+          {props.value || <span className="text-muted-foreground">{props.emptyLabel}</span>}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {editing ? (
+          <>
+            <Button size="sm" disabled={props.saving} onClick={() => { props.onSave(draft); setEditing(false); }}>
+              <Save className="h-3.5 w-3.5 mr-1" /> {props.saving ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setDraft(props.value); setEditing(false); }}>
+              <X className="h-3.5 w-3.5 mr-1" /> Cancel
+            </Button>
+          </>
+        ) : props.value ? (
+          <>
+            <Button size="sm" variant="outline" onClick={() => props.onCopy(props.value)}>
+              {props.copied ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+              {props.copied ? "Copied" : "Copy"}
+            </Button>
+            <QuickOpenMenu pitch={props.value} contact={props.contact} />
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
