@@ -1,37 +1,44 @@
-# Security policy
+# Security Policy
+
+## Supported versions
+
+Only the currently deployed version at
+https://bounty-bard-21.lovable.app receives security fixes.
 
 ## Reporting a vulnerability
 
-Email `sunisajantalok78@gmail.com` with:
-- A concise description
-- Steps to reproduce
-- The impact you observed
+Email **sunisajantalok78@gmail.com** with:
 
-Please do **not** open public issues for security reports.
+- A description of the issue
+- Reproduction steps or a proof-of-concept
+- The impact you believe it has
 
-## Public endpoints
+Please do not open a public GitHub issue for vulnerabilities. We aim to
+acknowledge within 72 hours and patch high-severity issues within 7 days.
 
-Everything under `/api/public/*` is reachable without a signed-in Supabase
-session. Each handler must:
+## Threat model
 
-1. Verify the `x-webhook-secret` header (`INCOMING_LEAD_SECRET`) with a
-   constant-time comparison (`safeEqual` in `src/lib/http.server.ts`).
-2. Cap request body size (`readBoundedText`).
-3. Validate every field with Zod (`src/lib/schemas.ts`).
-4. Never return raw database error messages to callers — log server-side
-   via `logError` and return a generic code.
+- **Auth:** Supabase Auth (email + password). Admin is granted by a DB
+  trigger only for the hard-coded owner email.
+- **Data isolation:** All user tables (`leads`, `my_portfolio`,
+  `scraper_config`, `marketing_plans`, `user_roles`) enforce RLS scoped to
+  `auth.uid()`.
+- **Public endpoints (`/api/public/*`):**
+  - `incoming-lead` — HMAC-SHA256 with `INCOMING_LEAD_SECRET`, timing-safe
+    compare, body size cap.
+  - `user-events` — best-effort observability sink, no PII.
+- **AI Gateway:** Called server-side only; requests are per-user rate-capped
+  (see [docs/GOVERNANCE.md](docs/GOVERNANCE.md)).
+- **Secrets:** Never in client bundles. `SUPABASE_SERVICE_ROLE_KEY` and
+  `INCOMING_LEAD_SECRET` are read only inside server-function handlers.
+- **Logging:** `src/lib/log.server.ts` scrubs known secret patterns before
+  emitting logs.
 
-## Row-level security
+## What must never happen
 
-All user-scoped tables (`leads`, `marketing_plans`, `my_portfolio`,
-`scraper_config`, `user_roles`) enable RLS with owner-scoped policies:
-`user_id = auth.uid()` plus admin override via `has_role(auth.uid(),'admin')`.
-Never widen a policy to `TO anon` unless the data is truly public.
-
-## Secrets
-
-- Runtime secrets live in Lovable Cloud → Secrets, read via `process.env`
-  inside server handlers only. Never at module scope of shared files.
-- `SUPABASE_SERVICE_ROLE_KEY` is used only in verified webhooks and admin
-  server functions after `has_role` check.
-- Publishable keys (`VITE_*`) are safe to ship to the browser.
+- A signed-in user reading or mutating another user's `leads`, `my_portfolio`,
+  or `scraper_config` rows.
+- A public HTTP caller writing to `leads` without a valid HMAC signature.
+- A service-role client (`supabaseAdmin`) being imported into any client bundle.
+- Any AI or DNS work executing without first checking the caller's daily
+  quota in `assertWithinDailyLimit`.
