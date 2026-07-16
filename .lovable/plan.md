@@ -1,85 +1,77 @@
+# Production-Readiness Plan v2
 
-# Production-Hardening Plan
+The app is already hardened (RLS, webhook signing, secret scrubbing, tests). This pass closes the remaining gaps that matter before real traffic and ships a proper docs set to your GitHub repo.
 
-A focused review of the Bounty Hunter dashboard with concrete fixes. I'll implement in the order below; each item is small and independently shippable.
+## 1. Reliability & correctness
 
-## 1. Security (highest priority)
+- Fix the 4 failing tests in `src/lib/pitch-governance.test.ts` (cooldown + daily-cap regressions from the last refactor). Green suite is a release gate.
+- Add a `refundGeneration` fast path when `requestProposalFn` throws, so a failed AI call does not permanently burn the user's daily quota.
+- Wrap `dispatchToN8n` with a 5s timeout + 1 retry; today a hung n8n instance blocks the request until Cloudflare kills it.
+- Add `Sentry`-style capture only in `logError` (no new dep — reuse existing `error-capture.ts`) and surface a `request_id` in every public-route JSON error.
 
-**Findings**
-- `src/routes/api/public/incoming-lead.ts` is an unauthenticated public POST that writes directly to `leads` via `supabaseAdmin` (RLS bypass). Anyone on the internet can flood the table.
-- Same route accepts arbitrary `raw: body` JSON with no size cap → storage abuse vector.
-- `src/routes/api/public/user-events.ts` forwards any client-supplied `email` + `event` to n8n with no auth, no rate limit, no validation — open relay.
-- `leads` RLS: `Authenticated read leads` uses `using: true` → any signed-in user reads every lead in the system (multi-tenant leak). Also `anon INSERT check: true` with no throttling.
-- `marketing_plans` allows `anon INSERT` with `check: true` — anyone can spam rows; no owner column.
-- `.env` in repo contains project URL + publishable key. Publishable is safe, but `.env` should still be `.gitignore`d to prevent later secret leakage.
-- Missing shared-secret header on `/api/public/incoming-lead` and `/api/public/user-events` (webhook signing).
+## 2. Data & schema
 
-**Fixes**
-- Add `INCOMING_LEAD_SECRET` (generated) and require `x-webhook-secret` header on both public routes; timing-safe compare.
-- Add per-IP in-memory + DB rate limit (10 req/min) on both public routes.
-- Cap request body at 32 KB; reject larger.
-- Migration: tighten `leads` RLS — add `user_id uuid` (nullable for legacy), rewrite SELECT policy to `user_id = auth.uid() OR has_role(auth.uid(),'admin')`; remove blanket anon INSERT (route uses service role anyway, so drop the anon policy).
-- Migration: add `user_id` to `marketing_plans`, replace anon INSERT with authenticated-owner INSERT + owner SELECT.
-- Add `.env` and `.env*.local` to `.gitignore` (keep `.env.example`).
+- Migration: add `leads.updated_at` trigger (already on some tables, missing on `leads` after column changes), and a `leads(user_id, status, created_at desc)` composite index for the dashboard's main list query.
+- Migration: add `check` constraints for `leads.status`, `leads.urgency`, `leads.validation_status` enums so bad values from n8n get rejected at write time, not silently stored.
+- Nightly `pg_cron` job to `VACUUM ANALYZE` `leads` + call `purge_stale_ignored_leads()`.
 
-## 2. Code Quality
+## 3. Rate limiting & abuse
 
-- Extract shared CORS + JSON response helpers (`src/lib/http.server.ts`) — currently duplicated in every public route.
-- Extract shared Zod schemas for `Lead`, `Urgency`, etc. into `src/lib/schemas.ts` for reuse client + server.
-- `dispatchToN8n` swallows the actual URL/status pair silently on Supabase log failures — return typed result already, but caller sites ignore `.ok`. Add a small `logN8nResult` helper and use it consistently.
-- Remove hardcoded fallback origin in `tryEmail` (line 36 of `incoming-lead.ts`) — replace with required env `APP_ORIGIN`, warn if missing.
+- Replace the in-memory per-IP limiter on `/api/public/*` with a Supabase-backed sliding window (`rate_limits` table + `check_and_increment` SQL function). Workers are stateless — the current in-memory limiter resets on every cold start.
+- Cap `raw` JSON to 32 KB (already) AND cap array/object depth to prevent parser DoS.
 
-## 3. Performance
+## 4. Observability
 
-- `getAdminStatsFn` fires 7 sequential-ish `count` queries; already `Promise.all` — good. But `auth.admin.listUsers({ perPage: 1000 })` is expensive; replace user count with a Postgres RPC `count(*) from auth.users`.
-- Add DB indexes: `leads(status)`, `leads(validation_status)`, `leads(created_at desc)`, `my_portfolio(user_id)`, `scraper_config(user_id)`.
-- Add `staleTime` defaults to TanStack Query (currently everything refetches on focus).
+- New admin sub-tab "System Health" showing: last 50 `n8n_events` with status, failed pitch generations today, per-endpoint request counts (from a new `request_log` view), and Supabase advisor warnings.
+- Structured JSON logs from every server fn (`scope`, `userId`, `latency_ms`, `ok`).
 
-## 4. Error Handling & Logging
+## 5. UX polish (small, high-impact)
 
-- Central `logError(scope, err, meta?)` helper that strips known secret keys (`authorization`, `apikey`, `token`, `password`) before console output.
-- Public routes currently return raw `error.message` from Postgres — replace with generic `"db_error"` and log detail server-side only.
-- `incoming-lead` swallows email + n8n failures silently; surface as structured fields in response (already partially) and log via new helper.
+- Optimistic status/tag updates on the dashboard (current mutations wait for round-trip).
+- Keyboard shortcuts: `j/k` to move selection, `g` to generate proposal, `/` to focus search.
+- Empty-state CTA on the leads panel that links to the Scraper tab when 0 leads exist.
 
-## 5. Configuration & Environment
+## 6. GitHub documentation set
 
-- Add `.env.example` with all required vars documented (VITE_*, SUPABASE_URL, N8N_WEBHOOK_URL, JINA_API_KEY, LOVABLE_API_KEY, INCOMING_LEAD_SECRET, APP_ORIGIN).
-- Verify `.gitignore` covers `.env`, `.env.local`, `.output/`, `.vinxi/`, `dist/`.
-- Document required Lovable Cloud secrets in `readme.dm` → rename to `README.md`.
+Create/refresh in the repo root and `/docs`:
 
-## 6. Testing
+```text
+README.md              # rewritten: what it is, live URL, 60-sec quickstart, screenshots
+SECURITY.md            # keep, add "supported versions" + PGP-less report flow
+CONTRIBUTING.md        # local dev, branch strategy, commit style, test/lint gates
+LICENSE                # MIT (confirm with you)
+docs/
+  ARCHITECTURE.md      # diagram: browser → TanStack serverFn → Supabase / Jina / n8n / Lovable AI
+  DATA_MODEL.md        # every table, columns, RLS summary, ER diagram (mermaid)
+  API.md               # /api/public/incoming-lead + /api/public/user-events contracts, headers, sample curl
+  N8N.md               # required workflows, expected payloads, webhook URL config, "generate_proposal" action shape
+  GOVERNANCE.md        # daily pitch cap, cooldown, dedup, 7-day purge — exact numbers + where enforced
+  RUNBOOK.md           # common incidents: n8n down, Jina quota, AI gateway 429, Supabase paused — with fixes
+  DEPLOY.md            # Lovable publish flow, required secrets, first-run checklist, rollback
+```
 
-- Add `vitest` (already available via `lovable-exec test`). Seed with:
-  - `src/lib/schemas.test.ts` — Lead payload validation edge cases.
-  - `src/lib/pitch-governance.test.ts` — daily cap + cooldown logic.
-  - `src/lib/http.server.test.ts` — CORS + auth header check.
-- Add a smoke test: `POST /api/public/incoming-lead` without secret → 401; with secret + invalid body → 400; with valid → 200.
+All docs use mermaid where a diagram helps and link back to the exact source files.
 
-## 7. Documentation
+## 7. Release checklist (added to `DEPLOY.md`)
 
-- Replace `readme.dm` (typo) with `README.md`:
-  - What the app does
-  - Local dev (`bun install`, `bun dev`)
-  - Required secrets (list from `.env.example`)
-  - Public webhook contracts (`/api/public/incoming-lead` schema)
-  - n8n integration overview
-  - Admin bootstrapping (email hardcoded in `handle_new_user_role`)
-- Add short `SECURITY.md` describing responsible disclosure + which routes are public.
-- Add JSDoc to `dispatchToN8n`, `requireSupabaseAuth`, `assertWithinDailyLimit`.
+1. `bun test` green.
+2. `security--run_security_scan` — 0 critical, 0 high.
+3. Supabase advisor — 0 errors.
+4. Rotate `INCOMING_LEAD_SECRET` if not rotated in 90 days.
+5. Confirm `APP_ORIGIN` matches the live domain.
+6. Smoke: sign in → generate 1 proposal → verify n8n event row.
+7. Publish via Lovable → verify `/api/public/incoming-lead` with signed curl.
 
 ---
 
-## Execution Order (what I'll actually change this turn)
+## Execution order this turn
 
-1. Migration: tighten `leads` + `marketing_plans` RLS, add indexes, add `user_id` columns.
-2. New `src/lib/http.server.ts` (CORS, auth-header check, JSON helper, body-size guard).
-3. Refactor `incoming-lead.ts` + `user-events.ts` to use shared helpers, require `x-webhook-secret`, validate size, sanitize errors.
-4. Generate `INCOMING_LEAD_SECRET` via `generate_secret`.
-5. `src/lib/log.server.ts` with secret-scrubbing logger; wire into public routes and `n8n.server.ts`.
-6. Add `.env.example`, update `.gitignore`, rename `readme.dm` → `README.md` with real content.
-7. Add `SECURITY.md`.
-8. Add three vitest files above.
+1. Fix `pitch-governance` tests + add refund path.
+2. Migration: composite index + enum checks + `leads.updated_at` trigger.
+3. Rate-limit table + SQL fn + wire into public routes.
+4. Write all 8 doc files listed above.
+5. Re-run tests + security scan; report deltas.
 
-Nothing in the UI/theme changes. All work is backend + config + docs.
+Nothing in the current theme, tabs, or auth flow changes. All work is backend hardening + docs.
 
-Approve and I'll implement it in one batch.
+Approve and I'll ship it in one batch.
