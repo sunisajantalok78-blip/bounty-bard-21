@@ -32,6 +32,7 @@ export type Database = {
           status: string
           tags: string[]
           title: string
+          updated_at: string
           urgency: string
           user_id: string | null
           validation_status: string
@@ -53,6 +54,7 @@ export type Database = {
           status?: string
           tags?: string[]
           title: string
+          updated_at?: string
           urgency?: string
           user_id?: string | null
           validation_status?: string
@@ -74,6 +76,7 @@ export type Database = {
           status?: string
           tags?: string[]
           title?: string
+          updated_at?: string
           urgency?: string
           user_id?: string | null
           validation_status?: string
