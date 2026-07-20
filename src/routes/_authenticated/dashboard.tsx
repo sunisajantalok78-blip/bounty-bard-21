@@ -322,6 +322,15 @@ function DashboardPage() {
           </div>
         </header>
 
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-transparent p-3">
+          <span className="text-xs uppercase tracking-widest text-cyan-300">Enterprise</span>
+          <span className="text-sm text-slate-300 mr-auto">Bulk-upload up to 1,000 leads · team workspaces · CRM export</span>
+          <Link to="/bulk-upload" className="text-xs rounded-md bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 px-3 py-1.5">Bulk Upload</Link>
+          <Link to="/library" className="text-xs rounded-md bg-white/5 hover:bg-white/10 text-slate-200 px-3 py-1.5">Team Library</Link>
+          <Link to="/team" className="text-xs rounded-md bg-white/5 hover:bg-white/10 text-slate-200 px-3 py-1.5">Team & Credits</Link>
+          <Link to="/onboarding" className="text-xs rounded-md bg-white/5 hover:bg-white/10 text-slate-200 px-3 py-1.5">Workspace</Link>
+        </div>
+
         <OnboardingBanner />
         <MetricsBar />
         <QuickIngest />
