@@ -14,17 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
+      credit_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          id: string
+          organization_id: string
+          reason: string
+          ref_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          id?: string
+          organization_id: string
+          reason: string
+          ref_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          id?: string
+          organization_id?: string
+          reason?: string
+          ref_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          organization_id: string
+          role: Database["public"]["Enums"]["org_role"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          organization_id: string
+          role?: Database["public"]["Enums"]["org_role"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          organization_id?: string
+          role?: Database["public"]["Enums"]["org_role"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_batches: {
+        Row: {
+          created_at: string
+          error: string | null
+          failed: number
+          filename: string
+          id: string
+          organization_id: string
+          processed: number
+          status: Database["public"]["Enums"]["batch_status"]
+          total: number
+          updated_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          failed?: number
+          filename: string
+          id?: string
+          organization_id: string
+          processed?: number
+          status?: Database["public"]["Enums"]["batch_status"]
+          total?: number
+          updated_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          failed?: number
+          filename?: string
+          id?: string
+          organization_id?: string
+          processed?: number
+          status?: Database["public"]["Enums"]["batch_status"]
+          total?: number
+          updated_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           ai_pitch: string | null
+          batch_id: string | null
           budget: number | null
           business_proposal: string | null
+          company_name: string | null
           contact: string | null
           created_at: string
           description: string | null
+          domain: string | null
           email_error: string | null
           email_sent: boolean
           id: string
+          organization_id: string | null
           processing_status: string | null
           raw: Json | null
           raw_social_data: Json | null
@@ -39,14 +175,18 @@ export type Database = {
         }
         Insert: {
           ai_pitch?: string | null
+          batch_id?: string | null
           budget?: number | null
           business_proposal?: string | null
+          company_name?: string | null
           contact?: string | null
           created_at?: string
           description?: string | null
+          domain?: string | null
           email_error?: string | null
           email_sent?: boolean
           id?: string
+          organization_id?: string | null
           processing_status?: string | null
           raw?: Json | null
           raw_social_data?: Json | null
@@ -61,14 +201,18 @@ export type Database = {
         }
         Update: {
           ai_pitch?: string | null
+          batch_id?: string | null
           budget?: number | null
           business_proposal?: string | null
+          company_name?: string | null
           contact?: string | null
           created_at?: string
           description?: string | null
+          domain?: string | null
           email_error?: string | null
           email_sent?: boolean
           id?: string
+          organization_id?: string | null
           processing_status?: string | null
           raw?: Json | null
           raw_social_data?: Json | null
@@ -81,7 +225,22 @@ export type Database = {
           user_id?: string | null
           validation_status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "lead_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       marketing_plans: {
         Row: {
@@ -131,6 +290,86 @@ export type Database = {
           created_at?: string
           id?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      organization_members: {
+        Row: {
+          created_at: string
+          credits_allocated: number
+          credits_used: number
+          id: string
+          organization_id: string
+          role: Database["public"]["Enums"]["org_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_allocated?: number
+          credits_used?: number
+          id?: string
+          organization_id: string
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_allocated?: number
+          credits_used?: number
+          id?: string
+          organization_id?: string
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          ai_key_mode: string
+          byok_anthropic_key: string | null
+          byok_openai_key: string | null
+          created_at: string
+          credits_pool: number
+          credits_used: number
+          id: string
+          name: string
+          owner_id: string
+          plan: string
+          updated_at: string
+        }
+        Insert: {
+          ai_key_mode?: string
+          byok_anthropic_key?: string | null
+          byok_openai_key?: string | null
+          created_at?: string
+          credits_pool?: number
+          credits_used?: number
+          id?: string
+          name: string
+          owner_id: string
+          plan?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_key_mode?: string
+          byok_anthropic_key?: string | null
+          byok_openai_key?: string | null
+          created_at?: string
+          credits_pool?: number
+          credits_used?: number
+          id?: string
+          name?: string
+          owner_id?: string
+          plan?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -209,10 +448,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_org_admin: { Args: { _org: string; _user: string }; Returns: boolean }
+      is_org_member: { Args: { _org: string; _user: string }; Returns: boolean }
       purge_stale_ignored_leads: { Args: never; Returns: number }
     }
     Enums: {
       app_role: "admin" | "user"
+      batch_status:
+        | "queued"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "cancelled"
+      org_role: "admin" | "member"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -341,6 +589,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      batch_status: [
+        "queued",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled",
+      ],
+      org_role: ["admin", "member"],
     },
   },
 } as const
