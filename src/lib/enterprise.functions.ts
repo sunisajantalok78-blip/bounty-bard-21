@@ -402,7 +402,81 @@ export const getEnterpriseMetricsFn = createServerFn({ method: "GET" })
     };
   });
 
-/* ---------- CRM export stubs ---------- */
+/* ---------- Org settings (BYOK + CRM webhooks + privacy) ---------- */
+
+export type OrgSettings = {
+  id: string; name: string; ai_key_mode: "platform" | "byok";
+  has_openai_key: boolean; has_anthropic_key: boolean;
+  hubspot_webhook_url: string | null; salesforce_webhook_url: string | null;
+  zero_data_retention: boolean;
+  credits_pool: number; credits_used: number;
+};
+
+async function assertOrgAdmin(c: any, orgId: string, userId: string) {
+  const { data, error } = await c.from("organization_members")
+    .select("role").eq("organization_id", orgId).eq("user_id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data || data.role !== "admin") throw new Error("Admin role required");
+}
+
+export const getOrgSettingsFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { orgId: string }) => z.object({ orgId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const c = context.supabase as unknown as { from: (t: string) => any };
+    const { data: row, error } = await c.from("organizations")
+      .select("id,name,ai_key_mode,byok_openai_key,byok_anthropic_key,hubspot_webhook_url,salesforce_webhook_url,zero_data_retention,credits_pool,credits_used")
+      .eq("id", data.orgId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!row) throw new Error("Organization not found");
+    const out: OrgSettings = {
+      id: row.id, name: row.name, ai_key_mode: row.ai_key_mode,
+      has_openai_key: !!row.byok_openai_key, has_anthropic_key: !!row.byok_anthropic_key,
+      hubspot_webhook_url: row.hubspot_webhook_url, salesforce_webhook_url: row.salesforce_webhook_url,
+      zero_data_retention: !!row.zero_data_retention,
+      credits_pool: row.credits_pool ?? 0, credits_used: row.credits_used ?? 0,
+    };
+    return out;
+  });
+
+export const updateOrgSettingsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: {
+    orgId: string;
+    ai_key_mode?: "platform" | "byok";
+    openai_key?: string | null;
+    anthropic_key?: string | null;
+    hubspot_webhook_url?: string | null;
+    salesforce_webhook_url?: string | null;
+    zero_data_retention?: boolean;
+    credits_pool?: number;
+  }) => z.object({
+    orgId: z.string().uuid(),
+    ai_key_mode: z.enum(["platform", "byok"]).optional(),
+    openai_key: z.string().trim().max(500).nullable().optional(),
+    anthropic_key: z.string().trim().max(500).nullable().optional(),
+    hubspot_webhook_url: z.union([z.string().trim().url().max(500), z.literal("")]).nullable().optional(),
+    salesforce_webhook_url: z.union([z.string().trim().url().max(500), z.literal("")]).nullable().optional(),
+    zero_data_retention: z.boolean().optional(),
+    credits_pool: z.number().int().min(0).max(10_000_000).optional(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const c = context.supabase as unknown as { from: (t: string) => any };
+    await assertOrgAdmin(c, data.orgId, context.userId);
+    const patch: Record<string, unknown> = {};
+    if (data.ai_key_mode !== undefined) patch.ai_key_mode = data.ai_key_mode;
+    if (data.openai_key !== undefined) patch.byok_openai_key = data.openai_key || null;
+    if (data.anthropic_key !== undefined) patch.byok_anthropic_key = data.anthropic_key || null;
+    if (data.hubspot_webhook_url !== undefined) patch.hubspot_webhook_url = data.hubspot_webhook_url || null;
+    if (data.salesforce_webhook_url !== undefined) patch.salesforce_webhook_url = data.salesforce_webhook_url || null;
+    if (data.zero_data_retention !== undefined) patch.zero_data_retention = data.zero_data_retention;
+    if (data.credits_pool !== undefined) patch.credits_pool = data.credits_pool;
+    const { error } = await c.from("organizations").update(patch).eq("id", data.orgId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ---------- CRM export (fires configured webhook) ---------- */
 
 export const exportToCrmFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -413,8 +487,26 @@ export const exportToCrmFn = createServerFn({ method: "POST" })
       provider: z.enum(["hubspot", "salesforce", "instantly", "lemlist"]),
     }).parse(d),
   )
-  .handler(async ({ data }) => {
-    // Stub — a real integration would POST to the provider's API here.
-    // Downstream teams can wire connector credentials (HubSpot/Salesforce) later.
-    return { ok: true, provider: data.provider, exported: data.leadIds.length, note: "Queued for CRM push (stub)" };
+  .handler(async ({ data, context }) => {
+    const c = context.supabase as unknown as { from: (t: string) => any };
+    const { data: org, error: oErr } = await c.from("organizations")
+      .select("hubspot_webhook_url,salesforce_webhook_url").eq("id", data.orgId).maybeSingle();
+    if (oErr) throw new Error(oErr.message);
+    const { data: leads, error: lErr } = await c.from("leads")
+      .select("id,title,company_name,domain,contact,ai_pitch,business_proposal,status,tags,created_at")
+      .in("id", data.leadIds);
+    if (lErr) throw new Error(lErr.message);
+
+    if (data.provider === "instantly" || data.provider === "lemlist") {
+      return { ok: true, provider: data.provider, exported: leads?.length ?? 0, note: "Use the CSV preset export for this provider." };
+    }
+    const url = data.provider === "hubspot" ? org?.hubspot_webhook_url : org?.salesforce_webhook_url;
+    if (!url) throw new Error(`No ${data.provider} webhook URL configured. Add it in Settings.`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: data.provider, orgId: data.orgId, leads }),
+    });
+    if (!res.ok) throw new Error(`${data.provider} webhook failed: ${res.status}`);
+    return { ok: true, provider: data.provider, exported: leads?.length ?? 0 };
   });
