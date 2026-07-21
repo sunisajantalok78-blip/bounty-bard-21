@@ -339,11 +339,14 @@ export type Database = {
           created_at: string
           credits_pool: number
           credits_used: number
+          hubspot_webhook_url: string | null
           id: string
           name: string
           owner_id: string
           plan: string
+          salesforce_webhook_url: string | null
           updated_at: string
+          zero_data_retention: boolean
         }
         Insert: {
           ai_key_mode?: string
@@ -352,11 +355,14 @@ export type Database = {
           created_at?: string
           credits_pool?: number
           credits_used?: number
+          hubspot_webhook_url?: string | null
           id?: string
           name: string
           owner_id: string
           plan?: string
+          salesforce_webhook_url?: string | null
           updated_at?: string
+          zero_data_retention?: boolean
         }
         Update: {
           ai_key_mode?: string
@@ -365,11 +371,14 @@ export type Database = {
           created_at?: string
           credits_pool?: number
           credits_used?: number
+          hubspot_webhook_url?: string | null
           id?: string
           name?: string
           owner_id?: string
           plan?: string
+          salesforce_webhook_url?: string | null
           updated_at?: string
+          zero_data_retention?: boolean
         }
         Relationships: []
       }
