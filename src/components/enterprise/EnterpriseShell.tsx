@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ReactNode } from "react";
 import {
-  LayoutDashboard, Upload, Users, Library, ShieldCheck, Sparkles,
+  LayoutDashboard, Upload, Users, Library, ShieldCheck, Sparkles, Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ const nav = [
   { to: "/bulk-upload", label: "Bulk Upload", icon: Upload },
   { to: "/library", label: "Team Library", icon: Library },
   { to: "/team", label: "Team & Credits", icon: Users },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function EnterpriseShell({ children, orgName }: { children: ReactNode; orgName?: string }) {
