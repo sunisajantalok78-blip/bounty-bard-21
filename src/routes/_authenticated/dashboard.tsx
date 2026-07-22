@@ -962,7 +962,14 @@ function LeadsPanel() {
                 </div>
                 <ProcessingStepper status={selectedLead.processing_status as ProcStep} />
                 {selectedLead.description && (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedLead.description}</p>
+                  <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-3">
+                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-cyan-300/80 mb-1.5">
+                      <Radio className="h-3 w-3" /> Scraped post / page text
+                    </div>
+                    <p className="text-sm text-foreground whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">
+                      {selectedLead.description}
+                    </p>
+                  </div>
                 )}
                 {selectedLead.contact && (
                   <p className="text-xs text-muted-foreground break-all">
