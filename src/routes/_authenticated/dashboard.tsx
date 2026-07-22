@@ -1316,13 +1316,13 @@ function PortfolioPanel() {
   const updFn = useServerFn(updatePortfolioFn);
   const delFn = useServerFn(deletePortfolioFn);
 
-  const [draft, setDraft] = useState({ category: "Marketing", content: "" });
+  const [draft, setDraft] = useState({ category: "", content: "" });
   const [filter, setFilter] = useState<string>("All");
   const [editing, setEditing] = useState<{ id: string; category: string; content: string } | null>(null);
 
   const addMut = useMutation({
     mutationFn: (v: typeof draft) => addFn({ data: v }),
-    onSuccess: () => { setDraft({ category: draft.category, content: "" }); qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }); },
+    onSuccess: () => { setDraft({ category: "", content: "" }); qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }); },
   });
   const updMut = useMutation({
     mutationFn: (v: { id: string; category: string; content: string }) => updFn({ data: v }),
@@ -1335,8 +1335,7 @@ function PortfolioPanel() {
 
   const categories = useMemo(() => {
     const set = new Set<string>(["All"]);
-    items.forEach((i) => set.add(i.category));
-    PORTFOLIO_CATEGORIES.forEach((c) => set.add(c));
+    items.forEach((i) => { if (i.category) set.add(i.category); });
     return [...set];
   }, [items]);
   const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
@@ -1345,25 +1344,28 @@ function PortfolioPanel() {
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-center gap-2">
         <Briefcase className="h-5 w-5 text-accent" />
-        <CardTitle>Portfolio & Knowledge Base</CardTitle>
+        <CardTitle>Profession, Skills & Portfolio</CardTitle>
         <Badge variant="secondary" className="ml-auto">{items.length}</Badge>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Add any profession or skill you want leads for — dentist, electrician, Shopify developer, plumber, translator, whatever.
+          Anything you put here drives what the scraper looks for.
+        </p>
         <form
           className="grid gap-2 rounded-lg border border-border/60 bg-muted/30 p-3"
-          onSubmit={(e) => { e.preventDefault(); if (!draft.content.trim()) return; addMut.mutate(draft); }}
+          onSubmit={(e) => { e.preventDefault(); if (!draft.content.trim() || !draft.category.trim()) return; addMut.mutate(draft); }}
         >
           <div className="flex flex-col sm:flex-row gap-2">
-            <select
-              className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            <Input
+              placeholder="Profession / skill (e.g. Dental clinic in Madrid, Electrician Barcelona)"
               value={draft.category}
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-            >
-              {PORTFOLIO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+              className="sm:max-w-xs"
+            />
             <Textarea
               rows={2}
-              placeholder="Case study, skill, or teaching method…"
+              placeholder="Details — services, target clients, specialty, sample project…"
               value={draft.content}
               onChange={(e) => setDraft({ ...draft, content: e.target.value })}
               className="flex-1"
@@ -1374,22 +1376,24 @@ function PortfolioPanel() {
           </div>
         </form>
 
-        <div className="flex flex-wrap gap-1.5">
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setFilter(c)}
-              className={`text-xs px-2 py-1 rounded border transition ${
-                filter === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border/50 text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {c} {c !== "All" && <span className="opacity-60">({items.filter((i) => i.category === c).length})</span>}
-            </button>
-          ))}
-        </div>
+        {categories.length > 1 && (
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setFilter(c)}
+                className={`text-xs px-2 py-1 rounded border transition ${
+                  filter === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border/50 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c} {c !== "All" && <span className="opacity-60">({items.filter((i) => i.category === c).length})</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No entries in this category yet.</p>
+          <p className="text-sm text-muted-foreground">No entries yet — add a profession or skill above.</p>
         ) : (
           <ul className="grid gap-2 md:grid-cols-2">
             {filtered.map((it) => {
@@ -1399,13 +1403,11 @@ function PortfolioPanel() {
                   {isEditing ? (
                     <>
                       <div className="flex gap-2">
-                        <select
-                          className="rounded-md border border-border bg-background px-2 text-sm"
+                        <Input
                           value={editing.category}
                           onChange={(e) => setEditing({ ...editing, category: e.target.value })}
-                        >
-                          {PORTFOLIO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                          className="max-w-xs"
+                        />
                         <div className="ml-auto flex gap-1">
                           <Button size="sm" variant="ghost" onClick={() => setEditing(null)}><X className="h-4 w-4" /></Button>
                           <Button size="sm" disabled={updMut.isPending} onClick={() => updMut.mutate(editing)}>
