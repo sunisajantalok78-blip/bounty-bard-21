@@ -1468,7 +1468,7 @@ function ScraperPanel() {
 
   const saveMut = useMutation({
     mutationFn: () => saveFn({ data: {
-      sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults,
+      sources, keywords, intents: intents as never, geo_target: geoTarget, max_results_per_query: maxResults,
       n8n_webhook_url: n8nUrl.trim() ? n8nUrl.trim() : null,
     } }),
     onSuccess: () => { toast.success("Config saved"); qc.invalidateQueries({ queryKey: ["dash", "scraper"] }); },
