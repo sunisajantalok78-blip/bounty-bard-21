@@ -1516,7 +1516,7 @@ function ScraperPanel() {
         const p = JSON.parse(String(reader.result));
         if (p.sources) setSources({ facebook: !!p.sources.facebook, instagram: !!p.sources.instagram, google: !!p.sources.google, linkedin: !!p.sources.linkedin });
         if (Array.isArray(p.keywords)) setKeywords(p.keywords.filter((k: unknown) => typeof k === "string"));
-        if (Array.isArray(p.intents)) setIntents(p.intents);
+        // legacy intents field is ignored — free-form country supersedes it
         if (typeof p.geo_target === "string") setGeoTarget(p.geo_target);
         if (typeof p.max_results_per_query === "number") setMaxResults(p.max_results_per_query);
         if (typeof p.n8n_webhook_url === "string") setN8nUrl(p.n8n_webhook_url);
