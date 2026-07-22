@@ -1456,13 +1456,13 @@ function ScraperPanel() {
   const [keywords, setKeywords] = useState<string[]>(cfg.keywords ?? []);
   const [kwInput, setKwInput] = useState("");
   const cfgAny = cfg as unknown as {
-    intents?: LeadIntent[];
-    geo_target?: GeoTarget;
+    intents?: string[];
+    geo_target?: string;
     max_results_per_query?: number;
     n8n_webhook_url?: string | null;
   };
-  const [intents, setIntents] = useState<LeadIntent[]>(cfgAny.intents ?? ["hiring", "freelance"]);
-  const [geoTarget, setGeoTarget] = useState<GeoTarget>(cfgAny.geo_target ?? "global");
+  const [intents] = useState<string[]>(cfgAny.intents ?? []);
+  const [geoTarget, setGeoTarget] = useState<string>(cfgAny.geo_target ?? "");
   const [maxResults, setMaxResults] = useState<number>(cfgAny.max_results_per_query ?? 5);
   const [n8nUrl, setN8nUrl] = useState<string>(cfgAny.n8n_webhook_url ?? "");
 
