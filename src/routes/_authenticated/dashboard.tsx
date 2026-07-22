@@ -24,11 +24,7 @@ import {
   triggerGlobalScrapeFn,
   testN8nWebhookFn,
   LEAD_STATUSES,
-  LEAD_INTENTS,
-  GEO_TARGETS,
   type LeadStatus,
-  type LeadIntent,
-  type GeoTarget,
 
 } from "@/lib/dashboard.functions";
 import { Button } from "@/components/ui/button";
