@@ -1307,7 +1307,7 @@ function QuickOpenMenu({ pitch, contact }: { pitch: string; contact: string | nu
 
 /* ---------------- Portfolio ---------------- */
 
-const PORTFOLIO_CATEGORIES = ["Marketing", "CRM", "Language", "Case study", "Skill", "Project", "Tool"];
+// Portfolio categories are free-form now — user types anything (profession/skill).
 
 function PortfolioPanel() {
   const qc = useQueryClient();
