@@ -130,11 +130,14 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
     .limit(20);
 
 
-  const { jinaSearch, validateFromText, buildPortfolioQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
+  const { jinaSearch, validateFromText, buildPortfolioQueries, buildKeywordQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
 
-  const baseQueries = buildPortfolioQueries(portfolio ?? [], 3);
+  const keywords = ((cfg?.keywords ?? []) as string[]).filter((k) => typeof k === "string" && k.trim());
+  const keywordQueries = buildKeywordQueries(keywords);
+  const portfolioQueries = buildPortfolioQueries(portfolio ?? [], 3);
+  const baseQueries = Array.from(new Set([...keywordQueries, ...portfolioQueries]));
   if (baseQueries.length === 0) {
-    return { ok: false, inserted: 0, queries: 0, errors: ["my_portfolio is empty — add skills/case studies to drive the scraper"] };
+    return { ok: false, inserted: 0, queries: 0, errors: ["Add at least one skill/keyword or a portfolio entry to drive the search"] };
   }
 
   // Optionally scope by enabled sources
@@ -150,7 +153,7 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
     for (const s of siteFilters) rawQueries.push(`${q} ${s}`);
   }
 
-  // Apply intent modifiers and geo/platform constraints to every query
+  // Apply free-form country/region scoping to every query
   const queries = applyIntentAndGeo(rawQueries, intents, geoTarget);
 
   let inserted = 0;
