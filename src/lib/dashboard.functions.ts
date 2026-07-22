@@ -666,8 +666,9 @@ export type ScraperSources = {
 
 export const LEAD_INTENTS = ["hiring", "freelance", "pain_points"] as const;
 export type LeadIntent = (typeof LEAD_INTENTS)[number];
+// Kept for back-compat with old configs; the UI now uses a free-form country field.
 export const GEO_TARGETS = ["global", "remote", "thailand", "usa", "europe"] as const;
-export type GeoTarget = (typeof GEO_TARGETS)[number];
+export type GeoTarget = string;
 
 const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,n8n_webhook_url,updated_at";
 
@@ -695,8 +696,8 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
   .inputValidator((d: {
     sources: ScraperSources;
     keywords: string[];
-    intents: LeadIntent[];
-    geo_target: GeoTarget;
+    intents?: LeadIntent[];
+    geo_target: string;
     max_results_per_query: number;
     n8n_webhook_url?: string | null;
   }) =>
@@ -709,8 +710,8 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           linkedin: z.boolean(),
         }),
         keywords: z.array(z.string().trim().min(1).max(80)).max(50),
-        intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length),
-        geo_target: z.enum(GEO_TARGETS),
+        intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length).optional().default([]),
+        geo_target: z.string().trim().max(80).default(""),
         max_results_per_query: z.number().int().min(1).max(50),
         n8n_webhook_url: z
           .string()
