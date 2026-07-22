@@ -24,11 +24,7 @@ import {
   triggerGlobalScrapeFn,
   testN8nWebhookFn,
   LEAD_STATUSES,
-  LEAD_INTENTS,
-  GEO_TARGETS,
   type LeadStatus,
-  type LeadIntent,
-  type GeoTarget,
 
 } from "@/lib/dashboard.functions";
 import { Button } from "@/components/ui/button";
@@ -966,7 +962,14 @@ function LeadsPanel() {
                 </div>
                 <ProcessingStepper status={selectedLead.processing_status as ProcStep} />
                 {selectedLead.description && (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedLead.description}</p>
+                  <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-3">
+                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-cyan-300/80 mb-1.5">
+                      <Radio className="h-3 w-3" /> Scraped post / page text
+                    </div>
+                    <p className="text-sm text-foreground whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">
+                      {selectedLead.description}
+                    </p>
+                  </div>
                 )}
                 {selectedLead.contact && (
                   <p className="text-xs text-muted-foreground break-all">
@@ -1307,7 +1310,7 @@ function QuickOpenMenu({ pitch, contact }: { pitch: string; contact: string | nu
 
 /* ---------------- Portfolio ---------------- */
 
-const PORTFOLIO_CATEGORIES = ["Marketing", "CRM", "Language", "Case study", "Skill", "Project", "Tool"];
+// Portfolio categories are free-form now — user types anything (profession/skill).
 
 function PortfolioPanel() {
   const qc = useQueryClient();
@@ -1316,13 +1319,13 @@ function PortfolioPanel() {
   const updFn = useServerFn(updatePortfolioFn);
   const delFn = useServerFn(deletePortfolioFn);
 
-  const [draft, setDraft] = useState({ category: "Marketing", content: "" });
+  const [draft, setDraft] = useState({ category: "", content: "" });
   const [filter, setFilter] = useState<string>("All");
   const [editing, setEditing] = useState<{ id: string; category: string; content: string } | null>(null);
 
   const addMut = useMutation({
     mutationFn: (v: typeof draft) => addFn({ data: v }),
-    onSuccess: () => { setDraft({ category: draft.category, content: "" }); qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }); },
+    onSuccess: () => { setDraft({ category: "", content: "" }); qc.invalidateQueries({ queryKey: ["dash", "portfolio"] }); },
   });
   const updMut = useMutation({
     mutationFn: (v: { id: string; category: string; content: string }) => updFn({ data: v }),
@@ -1335,8 +1338,7 @@ function PortfolioPanel() {
 
   const categories = useMemo(() => {
     const set = new Set<string>(["All"]);
-    items.forEach((i) => set.add(i.category));
-    PORTFOLIO_CATEGORIES.forEach((c) => set.add(c));
+    items.forEach((i) => { if (i.category) set.add(i.category); });
     return [...set];
   }, [items]);
   const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
@@ -1345,25 +1347,28 @@ function PortfolioPanel() {
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-center gap-2">
         <Briefcase className="h-5 w-5 text-accent" />
-        <CardTitle>Portfolio & Knowledge Base</CardTitle>
+        <CardTitle>Profession, Skills & Portfolio</CardTitle>
         <Badge variant="secondary" className="ml-auto">{items.length}</Badge>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Add any profession or skill you want leads for — dentist, electrician, Shopify developer, plumber, translator, whatever.
+          Anything you put here drives what the scraper looks for.
+        </p>
         <form
           className="grid gap-2 rounded-lg border border-border/60 bg-muted/30 p-3"
-          onSubmit={(e) => { e.preventDefault(); if (!draft.content.trim()) return; addMut.mutate(draft); }}
+          onSubmit={(e) => { e.preventDefault(); if (!draft.content.trim() || !draft.category.trim()) return; addMut.mutate(draft); }}
         >
           <div className="flex flex-col sm:flex-row gap-2">
-            <select
-              className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            <Input
+              placeholder="Profession / skill (e.g. Dental clinic in Madrid, Electrician Barcelona)"
               value={draft.category}
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-            >
-              {PORTFOLIO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+              className="sm:max-w-xs"
+            />
             <Textarea
               rows={2}
-              placeholder="Case study, skill, or teaching method…"
+              placeholder="Details — services, target clients, specialty, sample project…"
               value={draft.content}
               onChange={(e) => setDraft({ ...draft, content: e.target.value })}
               className="flex-1"
@@ -1374,22 +1379,24 @@ function PortfolioPanel() {
           </div>
         </form>
 
-        <div className="flex flex-wrap gap-1.5">
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setFilter(c)}
-              className={`text-xs px-2 py-1 rounded border transition ${
-                filter === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border/50 text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {c} {c !== "All" && <span className="opacity-60">({items.filter((i) => i.category === c).length})</span>}
-            </button>
-          ))}
-        </div>
+        {categories.length > 1 && (
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setFilter(c)}
+                className={`text-xs px-2 py-1 rounded border transition ${
+                  filter === c ? "border-primary/60 bg-primary/15 text-foreground" : "border-border/50 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c} {c !== "All" && <span className="opacity-60">({items.filter((i) => i.category === c).length})</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No entries in this category yet.</p>
+          <p className="text-sm text-muted-foreground">No entries yet — add a profession or skill above.</p>
         ) : (
           <ul className="grid gap-2 md:grid-cols-2">
             {filtered.map((it) => {
@@ -1399,13 +1406,11 @@ function PortfolioPanel() {
                   {isEditing ? (
                     <>
                       <div className="flex gap-2">
-                        <select
-                          className="rounded-md border border-border bg-background px-2 text-sm"
+                        <Input
                           value={editing.category}
                           onChange={(e) => setEditing({ ...editing, category: e.target.value })}
-                        >
-                          {PORTFOLIO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                          className="max-w-xs"
+                        />
                         <div className="ml-auto flex gap-1">
                           <Button size="sm" variant="ghost" onClick={() => setEditing(null)}><X className="h-4 w-4" /></Button>
                           <Button size="sm" disabled={updMut.isPending} onClick={() => updMut.mutate(editing)}>
@@ -1458,19 +1463,19 @@ function ScraperPanel() {
   const [keywords, setKeywords] = useState<string[]>(cfg.keywords ?? []);
   const [kwInput, setKwInput] = useState("");
   const cfgAny = cfg as unknown as {
-    intents?: LeadIntent[];
-    geo_target?: GeoTarget;
+    intents?: string[];
+    geo_target?: string;
     max_results_per_query?: number;
     n8n_webhook_url?: string | null;
   };
-  const [intents, setIntents] = useState<LeadIntent[]>(cfgAny.intents ?? ["hiring", "freelance"]);
-  const [geoTarget, setGeoTarget] = useState<GeoTarget>(cfgAny.geo_target ?? "global");
+  const [intents] = useState<string[]>(cfgAny.intents ?? []);
+  const [geoTarget, setGeoTarget] = useState<string>(cfgAny.geo_target ?? "");
   const [maxResults, setMaxResults] = useState<number>(cfgAny.max_results_per_query ?? 5);
   const [n8nUrl, setN8nUrl] = useState<string>(cfgAny.n8n_webhook_url ?? "");
 
   const saveMut = useMutation({
     mutationFn: () => saveFn({ data: {
-      sources, keywords, intents, geo_target: geoTarget, max_results_per_query: maxResults,
+      sources, keywords, intents: intents as never, geo_target: geoTarget, max_results_per_query: maxResults,
       n8n_webhook_url: n8nUrl.trim() ? n8nUrl.trim() : null,
     } }),
     onSuccess: () => { toast.success("Config saved"); qc.invalidateQueries({ queryKey: ["dash", "scraper"] }); },
@@ -1518,7 +1523,7 @@ function ScraperPanel() {
         const p = JSON.parse(String(reader.result));
         if (p.sources) setSources({ facebook: !!p.sources.facebook, instagram: !!p.sources.instagram, google: !!p.sources.google, linkedin: !!p.sources.linkedin });
         if (Array.isArray(p.keywords)) setKeywords(p.keywords.filter((k: unknown) => typeof k === "string"));
-        if (Array.isArray(p.intents)) setIntents(p.intents);
+        // legacy intents field is ignored — free-form country supersedes it
         if (typeof p.geo_target === "string") setGeoTarget(p.geo_target);
         if (typeof p.max_results_per_query === "number") setMaxResults(p.max_results_per_query);
         if (typeof p.n8n_webhook_url === "string") setN8nUrl(p.n8n_webhook_url);
@@ -1597,43 +1602,23 @@ function ScraperPanel() {
         <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-4">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            <h4 className="text-sm font-medium">Intent & Geo Target Optimizer</h4>
+            <h4 className="text-sm font-medium">Country / region & search volume</h4>
           </div>
-
-          <div>
-            <label className="text-xs uppercase tracking-wide text-muted-foreground">Lead intent</label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {(LEAD_INTENTS as readonly LeadIntent[]).map((i) => {
-                const active = intents.includes(i);
-                const label = i === "hiring" ? "Hiring / Jobs" : i === "freelance" ? "Freelance / Contract" : "Pain Points";
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setIntents(active ? intents.filter((x) => x !== i) : [...intents, i])}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition ${active ? "border-primary bg-primary/15 text-primary" : "border-border/60 text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Type any country, city or region — free-form. Leave empty to search worldwide.
+            Examples: <span className="text-foreground">Spain</span>, <span className="text-foreground">Barcelona</span>,
+            <span className="text-foreground"> Europe remote</span>, <span className="text-foreground">Madrid</span>.
+          </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-xs uppercase tracking-wide text-muted-foreground">Geo / Platform target</label>
-              <select
+              <label className="text-xs uppercase tracking-wide text-muted-foreground">Country / region</label>
+              <Input
                 value={geoTarget}
-                onChange={(e) => setGeoTarget(e.target.value as GeoTarget)}
-                className="mt-2 w-full h-9 rounded-md border border-border/60 bg-background px-2 text-sm"
-              >
-                {(GEO_TARGETS as readonly GeoTarget[]).map((g) => (
-                  <option key={g} value={g}>
-                    {g === "global" ? "Global" : g === "remote" ? "Remote" : g === "thailand" ? "Local / Thailand" : g === "usa" ? "USA" : "Europe"}
-                  </option>
-                ))}
-              </select>
+                onChange={(e) => setGeoTarget(e.target.value)}
+                placeholder="e.g. Spain, Barcelona, Europe remote"
+                className="mt-2 h-9"
+              />
             </div>
             <div>
               <label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center justify-between">
@@ -1649,7 +1634,7 @@ function ScraperPanel() {
                 onChange={(e) => setMaxResults(Number(e.target.value))}
                 className="mt-3 w-full accent-primary"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per portfolio query to protect API usage.</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per query to protect API usage.</p>
             </div>
           </div>
         </section>

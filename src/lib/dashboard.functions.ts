@@ -130,11 +130,14 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
     .limit(20);
 
 
-  const { jinaSearch, validateFromText, buildPortfolioQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
+  const { jinaSearch, validateFromText, buildPortfolioQueries, buildKeywordQueries, applyIntentAndGeo } = await import("@/lib/scraper.server");
 
-  const baseQueries = buildPortfolioQueries(portfolio ?? [], 3);
+  const keywords = ((cfg?.keywords ?? []) as string[]).filter((k) => typeof k === "string" && k.trim());
+  const keywordQueries = buildKeywordQueries(keywords);
+  const portfolioQueries = buildPortfolioQueries(portfolio ?? [], 3);
+  const baseQueries = Array.from(new Set([...keywordQueries, ...portfolioQueries]));
   if (baseQueries.length === 0) {
-    return { ok: false, inserted: 0, queries: 0, errors: ["my_portfolio is empty — add skills/case studies to drive the scraper"] };
+    return { ok: false, inserted: 0, queries: 0, errors: ["Add at least one skill/keyword or a portfolio entry to drive the search"] };
   }
 
   // Optionally scope by enabled sources
@@ -150,7 +153,7 @@ export const triggerGlobalScrapeFn = createServerFn({ method: "POST" })
     for (const s of siteFilters) rawQueries.push(`${q} ${s}`);
   }
 
-  // Apply intent modifiers and geo/platform constraints to every query
+  // Apply free-form country/region scoping to every query
   const queries = applyIntentAndGeo(rawQueries, intents, geoTarget);
 
   let inserted = 0;
@@ -663,8 +666,9 @@ export type ScraperSources = {
 
 export const LEAD_INTENTS = ["hiring", "freelance", "pain_points"] as const;
 export type LeadIntent = (typeof LEAD_INTENTS)[number];
+// Kept for back-compat with old configs; the UI now uses a free-form country field.
 export const GEO_TARGETS = ["global", "remote", "thailand", "usa", "europe"] as const;
-export type GeoTarget = (typeof GEO_TARGETS)[number];
+export type GeoTarget = string;
 
 const SCRAPER_COLS = "id,sources,keywords,intents,geo_target,max_results_per_query,n8n_webhook_url,updated_at";
 
@@ -692,8 +696,8 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
   .inputValidator((d: {
     sources: ScraperSources;
     keywords: string[];
-    intents: LeadIntent[];
-    geo_target: GeoTarget;
+    intents?: LeadIntent[];
+    geo_target: string;
     max_results_per_query: number;
     n8n_webhook_url?: string | null;
   }) =>
@@ -706,8 +710,8 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           linkedin: z.boolean(),
         }),
         keywords: z.array(z.string().trim().min(1).max(80)).max(50),
-        intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length),
-        geo_target: z.enum(GEO_TARGETS),
+        intents: z.array(z.enum(LEAD_INTENTS)).max(LEAD_INTENTS.length).optional().default([]),
+        geo_target: z.string().trim().max(80).default(""),
         max_results_per_query: z.number().int().min(1).max(50),
         n8n_webhook_url: z
           .string()
@@ -728,7 +732,7 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           user_id: context.userId,
           sources: data.sources,
           keywords: data.keywords,
-          intents: data.intents,
+          intents: data.intents ?? [],
           geo_target: data.geo_target,
           max_results_per_query: data.max_results_per_query,
           n8n_webhook_url: data.n8n_webhook_url ?? null,

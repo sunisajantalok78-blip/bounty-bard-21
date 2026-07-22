@@ -165,40 +165,32 @@ export function buildPortfolioQueries(items: PortfolioItem[], perItem = 3): stri
   return Array.from(out);
 }
 
-// ---------- Intent & Geo modifiers ----------
-const INTENT_MODIFIERS: Record<string, string[]> = {
-  hiring: ["hiring", "job opening"],
-  freelance: ["freelance contract", "looking for freelancer"],
-  pain_points: ["struggling with", "problem with"],
-};
+// ---------- Geo / country modifiers ----------
+// Free-form: whatever the user types (e.g. "Spain", "Barcelona", "Europe remote")
+// gets appended verbatim to every query. Empty = no geo scoping.
+export function applyIntentAndGeo(queries: string[], _intents: string[], geo: string): string[] {
+  const g = (geo ?? "").trim();
+  if (!g) return queries;
+  return queries.map((q) => `${q} ${g}`);
+}
 
-const GEO_MODIFIERS: Record<string, string[]> = {
-  global: [],
-  remote: ["remote"],
-  thailand: ["Thailand", "Bangkok"],
-  usa: ["USA", "United States"],
-  europe: ["Europe", "EU"],
-};
+// Turn a list of user-supplied skills / keywords into intent-shaped queries.
+// These are the primary signal now — every keyword the user types becomes
+// several "someone-needs-this" style searches.
+const KW_TEMPLATES = [
+  (kw: string) => `"need ${kw}"`,
+  (kw: string) => `"looking for ${kw}"`,
+  (kw: string) => `"hiring ${kw}"`,
+  (kw: string) => `${kw} freelancer wanted`,
+  (kw: string) => `${kw} job`,
+];
 
-export function applyIntentAndGeo(queries: string[], intents: string[], geo: string): string[] {
-  const intentFrags = (intents ?? [])
-    .flatMap((i) => INTENT_MODIFIERS[i] ?? [])
-    .filter(Boolean);
-  const geoFrags = GEO_MODIFIERS[geo] ?? [];
-  if (intentFrags.length === 0 && geoFrags.length === 0) return queries;
-
+export function buildKeywordQueries(keywords: string[]): string[] {
   const out = new Set<string>();
-  for (const q of queries) {
-    if (intentFrags.length === 0) {
-      for (const g of geoFrags) out.add(`${q} ${g}`);
-      if (geoFrags.length === 0) out.add(q);
-    } else {
-      for (const im of intentFrags) {
-        const base = `${im} ${q}`;
-        if (geoFrags.length === 0) out.add(base);
-        else for (const g of geoFrags) out.add(`${base} ${g}`);
-      }
-    }
+  for (const raw of keywords ?? []) {
+    const kw = (raw ?? "").trim();
+    if (!kw) continue;
+    for (const tpl of KW_TEMPLATES) out.add(tpl(kw));
   }
   return Array.from(out);
 }
