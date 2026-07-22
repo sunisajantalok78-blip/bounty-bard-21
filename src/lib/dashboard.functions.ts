@@ -732,7 +732,7 @@ export const saveScraperConfigFn = createServerFn({ method: "POST" })
           user_id: context.userId,
           sources: data.sources,
           keywords: data.keywords,
-          intents: data.intents,
+          intents: data.intents ?? [],
           geo_target: data.geo_target,
           max_results_per_query: data.max_results_per_query,
           n8n_webhook_url: data.n8n_webhook_url ?? null,
