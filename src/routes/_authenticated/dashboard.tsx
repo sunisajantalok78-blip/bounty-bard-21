@@ -1599,43 +1599,23 @@ function ScraperPanel() {
         <section className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-4">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            <h4 className="text-sm font-medium">Intent & Geo Target Optimizer</h4>
+            <h4 className="text-sm font-medium">Country / region & search volume</h4>
           </div>
-
-          <div>
-            <label className="text-xs uppercase tracking-wide text-muted-foreground">Lead intent</label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {(LEAD_INTENTS as readonly LeadIntent[]).map((i) => {
-                const active = intents.includes(i);
-                const label = i === "hiring" ? "Hiring / Jobs" : i === "freelance" ? "Freelance / Contract" : "Pain Points";
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setIntents(active ? intents.filter((x) => x !== i) : [...intents, i])}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition ${active ? "border-primary bg-primary/15 text-primary" : "border-border/60 text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Type any country, city or region — free-form. Leave empty to search worldwide.
+            Examples: <span className="text-foreground">Spain</span>, <span className="text-foreground">Barcelona</span>,
+            <span className="text-foreground"> Europe remote</span>, <span className="text-foreground">Madrid</span>.
+          </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-xs uppercase tracking-wide text-muted-foreground">Geo / Platform target</label>
-              <select
+              <label className="text-xs uppercase tracking-wide text-muted-foreground">Country / region</label>
+              <Input
                 value={geoTarget}
-                onChange={(e) => setGeoTarget(e.target.value as GeoTarget)}
-                className="mt-2 w-full h-9 rounded-md border border-border/60 bg-background px-2 text-sm"
-              >
-                {(GEO_TARGETS as readonly GeoTarget[]).map((g) => (
-                  <option key={g} value={g}>
-                    {g === "global" ? "Global" : g === "remote" ? "Remote" : g === "thailand" ? "Local / Thailand" : g === "usa" ? "USA" : "Europe"}
-                  </option>
-                ))}
-              </select>
+                onChange={(e) => setGeoTarget(e.target.value)}
+                placeholder="e.g. Spain, Barcelona, Europe remote"
+                className="mt-2 h-9"
+              />
             </div>
             <div>
               <label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center justify-between">
@@ -1651,7 +1631,7 @@ function ScraperPanel() {
                 onChange={(e) => setMaxResults(Number(e.target.value))}
                 className="mt-3 w-full accent-primary"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per portfolio query to protect API usage.</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Caps Jina AI hits per query to protect API usage.</p>
             </div>
           </div>
         </section>
